@@ -7,6 +7,7 @@ import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installProductionGuards } from './productionGuards.js';
 import './styles.css';
 import './auth-enhancements.css';
+import './brand.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
