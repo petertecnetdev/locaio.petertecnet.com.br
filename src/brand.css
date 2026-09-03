@@ -1,0 +1,25 @@
+.brand-mark{
+  overflow:hidden;
+  background:transparent!important;
+  box-shadow:none!important;
+  border-radius:50%!important;
+  flex:0 0 auto;
+}
+.brand-mark:before,
+.brand-mark:after,
+.brand-mark span{display:none!important}
+.brand-mark{
+  background-image:url('/logo-locaio.png')!important;
+  background-size:cover!important;
+  background-position:center!important;
+  background-repeat:no-repeat!important;
+}
+.auth-hero .brand-mark{
+  box-shadow:0 12px 34px rgba(35,88,255,.28)!important;
+}
+.sidebar .brand-mark{
+  box-shadow:0 8px 22px rgba(35,88,255,.18)!important;
+}
+@media(max-width:640px){
+  .auth-hero .brand-mark{width:46px;height:46px}
+}
