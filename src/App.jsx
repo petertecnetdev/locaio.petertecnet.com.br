@@ -12,7 +12,7 @@ const statusLabel = { draft: 'Rascunho', awaiting_documents: 'Documentos', await
 const expenseOptions = [['iptu', 'IPTU'], ['water', 'Água'], ['electricity', 'Energia'], ['internet', 'Internet'], ['condo', 'Condomínio']];
 
 function Brand({ compact = false }) {
-  return <div className={`brand ${compact ? 'compact' : ''}`}><span className="brand-mark"><span /></span><div><strong>Locaio</strong>{!compact && <small>by Peter Tecnet</small>}</div></div>;
+  return <div className={`brand ${compact ? 'compact' : ''}`}><img className="brand-logo" src="/logo-locaio.png?v=20260903-2" alt="Locaio" /><div><strong>Locaio</strong>{!compact && <small>by Peter Tecnet</small>}</div></div>;
 }
 
 function Toast({ toast }) { return toast ? <div className={`toast ${toast.type || ''}`}>{toast.message}</div> : null; }
