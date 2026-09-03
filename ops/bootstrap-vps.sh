@@ -7,7 +7,7 @@ REPOSITORY="${REPOSITORY:-https://github.com/petertecnetdev/locaio.petertecnet.c
 BRANCH="${BRANCH:-main}"
 NGINX_SITE="/etc/nginx/sites-available/${DOMAIN}"
 NGINX_ENABLED="/etc/nginx/sites-enabled/${DOMAIN}"
-LOCK_FILE="/tmp/petertecnet-vps-deploy.lock"
+LOCK_FILE="${LOCK_FILE:-/run/lock/locaio-vps-bootstrap.lock}"
 
 log() { printf '\n[Locaio bootstrap] %s\n' "$*"; }
 fail() { printf '\n[Locaio bootstrap] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -18,9 +18,13 @@ fail() { printf '\n[Locaio bootstrap] ERROR: %s\n' "$*" >&2; exit 1; }
 command -v git >/dev/null || fail "git não está instalado."
 command -v npm >/dev/null || fail "npm/node não estão instalados."
 command -v nginx >/dev/null || fail "nginx não está instalado."
+command -v flock >/dev/null || fail "flock não está instalado."
 
+mkdir -p "$(dirname "$LOCK_FILE")"
+touch "$LOCK_FILE"
+chmod 600 "$LOCK_FILE"
 exec 9>"$LOCK_FILE"
-flock -w 1800 9 || fail "não foi possível adquirir a fila global de deploy."
+flock -w 1800 9 || fail "não foi possível adquirir a fila do bootstrap do Locaio."
 
 DEPLOY_OWNER="$(stat -c '%U' /var/www/petertecnet.com.br 2>/dev/null || true)"
 if [[ -z "$DEPLOY_OWNER" || "$DEPLOY_OWNER" == "root" || "$DEPLOY_OWNER" == "UNKNOWN" ]]; then
