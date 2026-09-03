@@ -7,7 +7,9 @@ REPOSITORY="${REPOSITORY:-https://github.com/petertecnetdev/locaio.petertecnet.c
 BRANCH="${BRANCH:-main}"
 NGINX_SITE="/etc/nginx/sites-available/${DOMAIN}"
 NGINX_ENABLED="/etc/nginx/sites-enabled/${DOMAIN}"
+NGINX_FALLBACK="/etc/nginx/conf.d/${DOMAIN}.conf"
 LOCK_FILE="${LOCK_FILE:-/run/lock/locaio-vps-bootstrap.lock}"
+MARKER="# Managed by Locaio bootstrap: ${DOMAIN}"
 
 log() { printf '\n[Locaio bootstrap] %s\n' "$*"; }
 fail() { printf '\n[Locaio bootstrap] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -19,6 +21,7 @@ command -v git >/dev/null || fail "git não está instalado."
 command -v npm >/dev/null || fail "npm/node não estão instalados."
 command -v nginx >/dev/null || fail "nginx não está instalado."
 command -v flock >/dev/null || fail "flock não está instalado."
+command -v curl >/dev/null || fail "curl não está instalado."
 
 mkdir -p "$(dirname "$LOCK_FILE")"
 touch "$LOCK_FILE"
@@ -82,8 +85,29 @@ run_as_owner npm run build
 [[ -f "$APP_DIR/dist/index.html" ]] || fail "dist/index.html não foi gerado."
 grep -Fq "Locaio" "$APP_DIR/dist/index.html" || fail "o build gerado não parece ser do Locaio."
 
+log "Removendo conflitos antigos de server_name do Locaio"
+target_real="$(readlink -f "$NGINX_SITE" 2>/dev/null || printf '%s' "$NGINX_SITE")"
+fallback_real="$(readlink -f "$NGINX_FALLBACK" 2>/dev/null || printf '%s' "$NGINX_FALLBACK")"
+declare -A seen_conf=()
+while IFS= read -r candidate; do
+  [[ -n "$candidate" ]] || continue
+  candidate_real="$(readlink -f "$candidate" 2>/dev/null || printf '%s' "$candidate")"
+  [[ -n "${seen_conf[$candidate_real]:-}" ]] && continue
+  seen_conf[$candidate_real]=1
+  [[ "$candidate_real" == "$target_real" || "$candidate_real" == "$fallback_real" ]] && continue
+  if grep -Eq "^[[:space:]]*server_name[[:space:]].*${DOMAIN//./\\.}" "$candidate_real" 2>/dev/null; then
+    backup="${candidate_real}.pre-locaio-$(date +%Y%m%d%H%M%S)"
+    cp -a "$candidate_real" "$backup"
+    DOMAIN_FOR_PERL="$DOMAIN" perl -pi -e 'if (/^\s*server_name\s+/) { my $d=$ENV{"DOMAIN_FOR_PERL"}; s/(^|\s)\Q$d\E(?=\s|;)/$1/g; s/^\s*server_name\s*;\s*$/# server_name removed by Locaio bootstrap;/; }' "$candidate_real"
+    log "Conflito removido de $candidate_real (backup: $backup)"
+  fi
+done < <(grep -RIl --exclude='*.pre-locaio-*' -- "$DOMAIN" /etc/nginx 2>/dev/null || true)
+
 log "Configurando virtual host Nginx exclusivo"
+mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/conf.d
+rm -f "$NGINX_FALLBACK"
 cat > "$NGINX_SITE" <<NGINX
+$MARKER
 server {
     listen 80;
     listen [::]:80;
@@ -115,11 +139,33 @@ NGINX
 
 ln -sfn "$NGINX_SITE" "$NGINX_ENABLED"
 nginx -t
+
+log "Confirmando que o Nginx realmente inclui o vhost"
+effective_config="$(nginx -T 2>&1)"
+if ! grep -Fq "$MARKER" <<<"$effective_config"; then
+  log "sites-enabled não está sendo incluído; ativando fallback em conf.d"
+  cp "$NGINX_SITE" "$NGINX_FALLBACK"
+  nginx -t
+  effective_config="$(nginx -T 2>&1)"
+fi
+grep -Fq "$MARKER" <<<"$effective_config" || fail "nginx.conf não inclui sites-enabled nem conf.d; revise os includes do nginx.conf."
+
 systemctl reload nginx
 
 log "Validando HTTP antes do certificado"
-http_body="$(curl --fail --silent --show-error --max-time 15 -H "Host: $DOMAIN" http://127.0.0.1/)"
-grep -Fq "Locaio" <<<"$http_body" || fail "o vhost HTTP ainda não está entregando o Locaio."
+http_headers="$(mktemp)"
+http_body_file="$(mktemp)"
+http_code="$(curl --silent --show-error --max-time 15 -D "$http_headers" -o "$http_body_file" -w '%{http_code}' -H "Host: $DOMAIN" http://127.0.0.1/ || true)"
+if [[ "$http_code" != "200" ]] || ! grep -Fq "Locaio" "$http_body_file"; then
+  printf '\n--- Diagnóstico HTTP ---\n' >&2
+  printf 'HTTP status: %s\n' "$http_code" >&2
+  sed -n '1,20p' "$http_headers" >&2 || true
+  head -c 1200 "$http_body_file" >&2 || true
+  printf '\n--- Configurações efetivas contendo o domínio ---\n' >&2
+  nginx -T 2>&1 | grep -n -B3 -A10 -F "$DOMAIN" >&2 || true
+  fail "o vhost HTTP ainda não está entregando o Locaio."
+fi
+rm -f "$http_headers" "$http_body_file"
 
 if command -v certbot >/dev/null 2>&1; then
   log "Emitindo/atualizando certificado HTTPS com Certbot"
