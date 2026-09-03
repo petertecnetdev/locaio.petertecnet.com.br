@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/build.mjs",
     "preview": "vite preview",
-    "check": "vite build"
+    "check": "node scripts/build.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
