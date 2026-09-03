@@ -14,6 +14,10 @@ MARKER="# Managed by Locaio bootstrap: ${DOMAIN}"
 log() { printf '\n[Locaio bootstrap] %s\n' "$*"; }
 fail() { printf '\n[Locaio bootstrap] ERROR: %s\n' "$*" >&2; exit 1; }
 
+git_app() {
+  git -c safe.directory="$APP_DIR" -C "$APP_DIR" "$@"
+}
+
 [[ "$(id -u)" -eq 0 ]] || fail "execute este script como root."
 [[ "$APP_DIR" == /var/www/* ]] || fail "APP_DIR precisa ficar abaixo de /var/www."
 [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || fail "domínio inválido."
@@ -51,16 +55,16 @@ if [[ ! -d "$APP_DIR/.git" ]]; then
   mkdir -p "$(dirname "$APP_DIR")"
   git clone --branch "$BRANCH" --single-branch "$REPOSITORY" "$APP_DIR"
 else
-  current_remote="$(git -C "$APP_DIR" remote get-url origin 2>/dev/null || true)"
+  current_remote="$(git_app remote get-url origin 2>/dev/null || true)"
   case "$current_remote" in
     "$REPOSITORY"|git@github.com:petertecnetdev/locaio.petertecnet.com.br.git) ;;
     *) fail "$APP_DIR aponta para um repositório diferente: $current_remote" ;;
   esac
 fi
 
-git -C "$APP_DIR" fetch --prune origin "$BRANCH"
-git -C "$APP_DIR" checkout "$BRANCH"
-git -C "$APP_DIR" reset --hard "origin/$BRANCH"
+git_app fetch --prune origin "$BRANCH"
+git_app checkout "$BRANCH"
+git_app reset --hard "origin/$BRANCH"
 chown -R "$DEPLOY_OWNER:$DEPLOY_GROUP" "$APP_DIR"
 chmod -R g+rwX "$APP_DIR"
 
@@ -188,4 +192,4 @@ api_status="$(curl --silent --show-error --output /tmp/locaio-api-config.json --
 [[ "$api_status" == "200" ]] || { cat /tmp/locaio-api-config.json >&2 || true; fail "contexto da API respondeu HTTP $api_status."; }
 
 log "Concluído. $DOMAIN agora serve o frontend do Locaio com HTTPS."
-printf 'Commit publicado: %s\n' "$(git -C "$APP_DIR" rev-parse HEAD)"
+printf 'Commit publicado: %s\n' "$(git_app rev-parse HEAD)"
