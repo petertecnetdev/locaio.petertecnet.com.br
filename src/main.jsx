@@ -6,6 +6,7 @@ import { API_BASE_URL, APP_SLUG } from './services/api.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installProductionGuards } from './productionGuards.js';
 import './styles.css';
+import './auth-enhancements.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
