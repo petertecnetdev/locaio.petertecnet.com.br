@@ -1,13 +1,8 @@
-import { StrictMode, useEffect, useState } from 'react';
+import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './AppV3.jsx';
+import ContextualLocaio from './components/ContextualLocaio.jsx';
 import PublicSignaturePage from './PublicSignaturePage.jsx';
-import OperationalCommandBar from './components/OperationalCommandBar.jsx';
-import OperationsExperience from './components/OperationsExperience.jsx';
-import PortfolioIntelligence from './components/PortfolioIntelligence.jsx';
-import PropertyWorkspace from './components/PropertyWorkspace.jsx';
 import PeterAccountGateway from './components/PeterAccountGateway.jsx';
-import UserAccountCenter from './components/UserAccountCenter.jsx';
 import { API_BASE_URL, APP_SLUG } from './services/api.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installProductionGuards } from './productionGuards.js';
@@ -32,6 +27,7 @@ import './operational-command-bar.css';
 import './contract-workflow.css';
 import './public-signature.css';
 import './account-center.css';
+import './contextual-locaio.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
@@ -40,34 +36,6 @@ installContractProfileEnhancements();
 installLeaseOnboardingEnhancements();
 installPropertyManagementEnhancements();
 installPropertyWorkspaceBridge();
-
-function AccountCenterSession() {
-  const readSession = () => (localStorage.getItem('token') ? 'authenticated' : 'guest');
-  const [sessionState, setSessionState] = useState(readSession);
-
-  useEffect(() => {
-    let frame = 0;
-    const sync = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => setSessionState(readSession()));
-    };
-
-    window.addEventListener('authChanged', sync);
-    window.addEventListener('storage', sync);
-
-    const observer = new MutationObserver(sync);
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener('authChanged', sync);
-      window.removeEventListener('storage', sync);
-      observer.disconnect();
-    };
-  }, []);
-
-  return <UserAccountCenter key={sessionState} />;
-}
 
 const signatureMatch = window.location.pathname.match(/^\/sign\/([A-Za-z0-9]{40,128})\/?$/);
 const root = createRoot(document.getElementById('root'));
@@ -78,13 +46,7 @@ root.render(
       <PublicSignaturePage token={signatureMatch[1]} />
     ) : (
       <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
-        <PropertyWorkspace />
-        <OperationalCommandBar />
-        <PortfolioIntelligence />
-        <AccountCenterSession />
-        <OperationsExperience>
-          <App />
-        </OperationsExperience>
+        <ContextualLocaio />
       </PeterAccountGateway>
     )}
   </StrictMode>,
