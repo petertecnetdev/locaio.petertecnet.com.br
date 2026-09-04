@@ -31,20 +31,22 @@ installProductionGuards();
 
 const signatureMatch = window.location.pathname.match(/^\/sign\/([A-Za-z0-9]{40,128})\/?$/);
 const root = createRoot(document.getElementById('root'));
-
-root.render(
-  <StrictMode>
-    <AppRecoveryBoundary>
-      <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
-        {signatureMatch ? (
-          <PublicSignaturePage token={signatureMatch[1]} />
-        ) : (
-          <ContextualLocaio />
-        )}
-      </PeterAccountGateway>
-    </AppRecoveryBoundary>
-  </StrictMode>,
+const application = (
+  <AppRecoveryBoundary>
+    <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
+      {signatureMatch ? (
+        <PublicSignaturePage token={signatureMatch[1]} />
+      ) : (
+        <ContextualLocaio />
+      )}
+    </PeterAccountGateway>
+  </AppRecoveryBoundary>
 );
+
+// StrictMode continua ativo durante desenvolvimento, onde sua dupla execução de
+// effects ajuda a revelar efeitos não idempotentes. O bundle de produção monta
+// uma única vez integrações externas stateful, como Google Identity Services.
+root.render(import.meta.env.DEV ? <StrictMode>{application}</StrictMode> : application);
 
 async function installOptionalEnhancements() {
   if (signatureMatch) return;
