@@ -8,6 +8,7 @@ import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installProductionGuards } from './productionGuards.js';
 import { installVisualEnhancements } from './visual-enhancements.js';
 import { installContractProfileEnhancements } from './contract-profile-enhancements.js';
+import { installLeaseOnboardingEnhancements } from './lease-onboarding-enhancements.js';
 import './styles.css';
 import './auth-enhancements.css';
 import './brand.css';
@@ -15,12 +16,14 @@ import './visual-enhancements.css';
 import './dashboard-overview.css';
 import './design-system-v2.css';
 import './contract-profile-enhancements.css';
+import './lease-onboarding-enhancements.css';
 import './operations-experience.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
 installVisualEnhancements();
 installContractProfileEnhancements();
+installLeaseOnboardingEnhancements();
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
