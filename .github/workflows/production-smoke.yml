@@ -52,3 +52,11 @@ jobs:
             echo 'Google Identity Services foi inicializado mais de uma vez.' >&2
             exit 1
           fi
+
+      - name: Validate critical lease lifecycle without production writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          BROWSER="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          test -n "$BROWSER" || { echo 'Chrome/Chromium não encontrado.' >&2; exit 1; }
+          BROWSER="$BROWSER" node scripts/critical-flow-smoke.mjs
