@@ -4,6 +4,8 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.peterte
 export const APP_SLUG = import.meta.env.VITE_APP_SLUG || 'locaio';
 export const CONTEXT_STORAGE_KEY = `peter_context_role:${APP_SLUG}`;
 
+const SESSION_STORAGE_KEYS = ['token', 'access_token', 'auth_token', 'user'];
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 20000,
@@ -37,9 +39,16 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error?.response?.status === 401 && !String(error?.config?.url || '').includes('/auth/login')) {
-      ['token', 'access_token', 'auth_token', 'user'].forEach((key) => localStorage.removeItem(key));
+      // Uma sessão expirada costuma invalidar várias requests em paralelo. A
+      // primeira resposta 401 encerra a sessão; as seguintes não precisam
+      // disparar authChanged novamente e provocar recargas de contexto em cascata.
+      const hadSession = SESSION_STORAGE_KEYS.some((key) => localStorage.getItem(key) !== null)
+        || localStorage.getItem(CONTEXT_STORAGE_KEY) !== null;
+
+      SESSION_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
       localStorage.removeItem(CONTEXT_STORAGE_KEY);
-      window.dispatchEvent(new Event('authChanged'));
+
+      if (hadSession) window.dispatchEvent(new Event('authChanged'));
     }
     return Promise.reject(error);
   },
