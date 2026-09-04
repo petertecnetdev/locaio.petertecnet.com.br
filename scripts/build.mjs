@@ -1,9 +1,12 @@
 import { spawnSync } from 'node:child_process';
+import { rename, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const API_BASE_URL = (process.env.VITE_API_URL || 'https://api.petertecnet.com.br/api').replace(/\/+$/, '');
 const PROVIDERS_URL = process.env.PETER_IDENTITY_PROVIDERS_URL || `${API_BASE_URL}/account/identity/providers`;
 const IS_CI = String(process.env.CI || '').toLowerCase() === 'true';
+const SOURCE_LOGO = fileURLToPath(new URL('../public/logo-locaio.png', import.meta.url));
+const DIST_LOGO = fileURLToPath(new URL('../dist/logo-locaio.png', import.meta.url));
 
 function validGoogleClientId(value) {
   return typeof value === 'string'
@@ -46,6 +49,22 @@ async function resolveGoogleClientId() {
   }
 }
 
+async function optimizeProductionAssets() {
+  const temporaryLogo = `${DIST_LOGO}.tmp`;
+  try {
+    const { default: sharp } = await import('sharp');
+    await sharp(SOURCE_LOGO)
+      .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
+      .png({ compressionLevel: 9, adaptiveFiltering: true, effort: 10 })
+      .toFile(temporaryLogo);
+    await rename(temporaryLogo, DIST_LOGO);
+    console.log('[Locaio build] Logo de produção otimizada para carregamento rápido.');
+  } catch (error) {
+    await rm(temporaryLogo, { force: true }).catch(() => {});
+    console.warn(`[Locaio build] Não foi possível otimizar a logo; mantendo o arquivo original: ${error?.message || error}`);
+  }
+}
+
 try {
   const googleClientId = await resolveGoogleClientId();
   const viteBin = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url));
@@ -58,7 +77,10 @@ try {
   });
 
   if (result.error) throw result.error;
-  process.exit(result.status ?? 1);
+  if ((result.status ?? 1) !== 0) process.exit(result.status ?? 1);
+
+  await optimizeProductionAssets();
+  process.exit(0);
 } catch (error) {
   console.error(`[Locaio build] ${error?.message || error}`);
   process.exit(1);
