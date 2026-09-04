@@ -7,6 +7,7 @@ import PeterAccountGateway from './components/PeterAccountGateway.jsx';
 import { API_BASE_URL, APP_SLUG } from './services/api.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installGoogleIdentityGuard } from './services/googleIdentityGuard.js';
+import { installChunkRecoveryGuard, recoverFromChunkLoadError } from './services/chunkRecovery.js';
 import { installProductionGuards } from './productionGuards.js';
 import './styles.css';
 import './auth-enhancements.css';
@@ -27,6 +28,7 @@ import './account-center.css';
 import './contextual-locaio.css';
 import './app-recovery.css';
 
+installChunkRecoveryGuard();
 installAuthenticatedDownloads();
 installProductionGuards();
 installGoogleIdentityGuard();
@@ -74,6 +76,8 @@ async function installOptionalEnhancements() {
     propertyManagement.installPropertyManagementEnhancements();
     propertyWorkspace.installPropertyWorkspaceBridge();
   } catch (error) {
+    if (recoverFromChunkLoadError(error)) return;
+
     // Esses recursos refinam a experiência, mas não podem impedir login,
     // dashboard, assinatura pública ou navegação principal.
     console.error('[Locaio] Não foi possível carregar melhorias opcionais.', error);
