@@ -10,7 +10,7 @@ import PortfolioIntelligence from './PortfolioIntelligence.jsx';
 import PropertyWorkspace from './PropertyWorkspace.jsx';
 import UserAccountCenter from './UserAccountCenter.jsx';
 import TenantPortal from './TenantPortal.jsx';
-import { appApi, errorMessage, getContextRole, setContextRole } from '../services/api.js';
+import { appApi, CONTEXT_STORAGE_KEY, errorMessage, getContextRole, setContextRole } from '../services/api.js';
 
 class FeatureBoundary extends Component {
   constructor(props) {
@@ -44,19 +44,23 @@ function AccountCenterSession() {
       lastSession = nextSession;
       setSessionState(nextSession);
     };
+    const syncStorage = (event) => {
+      if (event.key !== null && event.key !== 'token') return;
+      sync();
+    };
 
     window.addEventListener('authChanged', sync);
-    window.addEventListener('storage', sync);
+    window.addEventListener('storage', syncStorage);
 
     // O launcher do ecossistema pode atualizar a sessão fora do fluxo React.
     // Mantemos a compatibilidade, mas só atualizamos estado quando o token
-    // realmente muda, evitando requestAnimationFrame a cada mutação visual.
+    // realmente muda, evitando trabalho a cada mutação visual ou preferência.
     const observer = new MutationObserver(sync);
     observer.observe(document.body, { childList: true, subtree: true });
 
     return () => {
       window.removeEventListener('authChanged', sync);
-      window.removeEventListener('storage', sync);
+      window.removeEventListener('storage', syncStorage);
       observer.disconnect();
     };
   }, []);
@@ -137,11 +141,15 @@ export default function ContextualLocaio() {
   useEffect(() => {
     loadContext();
     const authChanged = () => loadContext();
+    const storageChanged = (event) => {
+      if (event.key !== null && !['token', CONTEXT_STORAGE_KEY].includes(event.key)) return;
+      loadContext();
+    };
     window.addEventListener('authChanged', authChanged);
-    window.addEventListener('storage', authChanged);
+    window.addEventListener('storage', storageChanged);
     return () => {
       window.removeEventListener('authChanged', authChanged);
-      window.removeEventListener('storage', authChanged);
+      window.removeEventListener('storage', storageChanged);
     };
   }, [loadContext]);
 
