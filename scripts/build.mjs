@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 const API_BASE_URL = (process.env.VITE_API_URL || 'https://api.petertecnet.com.br/api').replace(/\/+$/, '');
 const PROVIDERS_URL = process.env.PETER_IDENTITY_PROVIDERS_URL || `${API_BASE_URL}/account/identity/providers`;
+const IS_CI = String(process.env.CI || '').toLowerCase() === 'true';
 
 function validGoogleClientId(value) {
   return typeof value === 'string'
@@ -18,23 +19,31 @@ async function resolveGoogleClientId() {
     return explicit;
   }
 
-  const response = await fetch(PROVIDERS_URL, {
-    headers: { Accept: 'application/json', 'X-Peter-App': process.env.VITE_APP_SLUG || 'locaio' },
-    signal: AbortSignal.timeout(10000),
-  });
+  try {
+    const response = await fetch(PROVIDERS_URL, {
+      headers: { Accept: 'application/json', 'X-Peter-App': process.env.VITE_APP_SLUG || 'locaio' },
+      signal: AbortSignal.timeout(10000),
+    });
 
-  if (!response.ok) {
-    throw new Error(`Não foi possível obter provedores de identidade (${response.status}).`);
+    if (!response.ok) {
+      throw new Error(`Não foi possível obter provedores de identidade (${response.status}).`);
+    }
+
+    const providers = await response.json();
+    const clientId = providers?.google?.enabled ? providers?.google?.client_id?.trim() : '';
+    if (!validGoogleClientId(clientId)) {
+      throw new Error('A API não publicou um Google Client ID válido.');
+    }
+    return clientId;
+  } catch (error) {
+    // CI validates source/build integrity and must not depend on availability of a
+    // production identity endpoint. Runtime/production builds remain strict.
+    if (IS_CI) {
+      console.warn(`[Locaio build] Provedor Google indisponível no CI: ${error?.message || error}. O bundle será validado com login Google desabilitado.`);
+      return '';
+    }
+    throw error;
   }
-
-  const providers = await response.json();
-  const clientId = providers?.google?.enabled ? providers?.google?.client_id?.trim() : '';
-
-  if (!validGoogleClientId(clientId)) {
-    throw new Error('A API não publicou um Google Client ID válido.');
-  }
-
-  return clientId;
 }
 
 try {
