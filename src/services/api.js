@@ -2,6 +2,7 @@ import axios from 'axios';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.petertecnet.com.br/api';
 export const APP_SLUG = import.meta.env.VITE_APP_SLUG || 'locaio';
+export const CONTEXT_STORAGE_KEY = `peter_context_role:${APP_SLUG}`;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -13,6 +14,22 @@ api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   config.headers['X-Frontend-Page'] = window.location.pathname;
+
+  const contextRole = localStorage.getItem(CONTEXT_STORAGE_KEY);
+  if (['landlord', 'tenant'].includes(contextRole)) {
+    config.headers['X-Peter-Context-Role'] = contextRole;
+
+    // O AppV3 legado continua chamando /leasing/dashboard. Enquanto ele é
+    // reutilizado no contexto de proprietário, roteamos apenas esse read para
+    // o dashboard contextual, sem duplicar o restante da aplicação.
+    if (String(config.url || '').includes('/leasing/dashboard')) {
+      config.url = String(config.url).replace(
+        '/leasing/dashboard',
+        `/leasing/context/dashboard?role=${encodeURIComponent(contextRole)}`,
+      );
+    }
+  }
+
   return config;
 });
 
@@ -21,11 +38,20 @@ api.interceptors.response.use(
   (error) => {
     if (error?.response?.status === 401 && !String(error?.config?.url || '').includes('/auth/login')) {
       ['token', 'access_token', 'auth_token', 'user'].forEach((key) => localStorage.removeItem(key));
+      localStorage.removeItem(CONTEXT_STORAGE_KEY);
       window.dispatchEvent(new Event('authChanged'));
     }
     return Promise.reject(error);
   },
 );
+
+export const setContextRole = (role) => {
+  if (['landlord', 'tenant'].includes(role)) localStorage.setItem(CONTEXT_STORAGE_KEY, role);
+  else localStorage.removeItem(CONTEXT_STORAGE_KEY);
+  window.dispatchEvent(new CustomEvent('peterContextChanged', { detail: { role } }));
+};
+
+export const getContextRole = () => localStorage.getItem(CONTEXT_STORAGE_KEY);
 
 export const appApi = {
   get: (path, config) => api.get(`/v1/apps/${APP_SLUG}${path}`, config),
