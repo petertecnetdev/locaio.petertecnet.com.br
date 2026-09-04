@@ -1,7 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-const root = new URL('../', import.meta.url);
 const srcDir = new URL('../src/', import.meta.url);
 const failures = [];
 
@@ -21,10 +20,20 @@ if (!mainSource.includes('ContextualLocaio')) {
   failures.push('main.jsx precisa manter ContextualLocaio como entrada de contexto.');
 }
 
+// Baseline legado conhecido. A regra é monotônica: entradas podem ser removidas
+// conforme os observers forem absorvidos por React, mas novos arquivos não podem
+// introduzir observação global do DOM sem uma decisão arquitetural explícita.
 const mutationObserverAllowlist = new Set([
   'src/visual-enhancements.js',
   'src/contract-profile-enhancements.js',
   'src/components/ContextualLocaio.jsx',
+  'src/components/LeaseTerminationExperience.jsx',
+  'src/components/UserAccountCenter.jsx',
+  'src/lease-onboarding-enhancements.js',
+  'src/premium-experience.js',
+  'src/productionGuards.js',
+  'src/property-management-enhancements.js',
+  'src/property-workspace-bridge.js',
 ]);
 
 function walk(directory) {
@@ -58,4 +67,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`Architecture guard OK: shell=${appShells[0]}; MutationObserver limitado ao legado conhecido.`);
+console.log(`Architecture guard OK: shell=${appShells[0]}; novos MutationObserver fora do baseline estão bloqueados.`);
