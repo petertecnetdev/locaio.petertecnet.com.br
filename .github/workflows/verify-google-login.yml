@@ -6,7 +6,7 @@ on:
     branches: [main]
     paths:
       - 'src/**'
-      - 'scripts/build.mjs'
+      - 'scripts/**'
       - 'package.json'
       - '.github/workflows/verify-google-login.yml'
 
@@ -18,85 +18,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
-      - name: Verify Google button and browser console
+      - name: Install browser smoke dependency
+        run: npm install --no-save --package-lock=false puppeteer-core@latest
+
+      - name: Verify Google button and provider configuration
         shell: bash
         run: |
           set -euo pipefail
           BROWSER="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
           test -n "$BROWSER" || { echo 'Chrome/Chromium não encontrado.' >&2; exit 1; }
-
-          mkdir -p /tmp/locaio-google-check
-          cd /tmp/locaio-google-check
-          npm init -y >/dev/null 2>&1
-          npm install --no-save --no-package-lock puppeteer-core@latest >/dev/null 2>&1
-
-          BROWSER="$BROWSER" node --input-type=module <<'NODE'
-          import puppeteer from 'puppeteer-core';
-
-          const browser = await puppeteer.launch({
-            executablePath: process.env.BROWSER,
-            headless: true,
-            args: ['--no-sandbox', '--disable-dev-shm-usage'],
-          });
-
-          const page = await browser.newPage();
-          const consoleErrors = [];
-          const failedRequests = [];
-
-          page.on('console', (message) => {
-            const text = message.text();
-            console.log(`[browser:${message.type()}] ${text}`);
-            if (message.type() === 'error') consoleErrors.push(text);
-          });
-          page.on('requestfailed', (request) => {
-            const url = request.url();
-            if (url.includes('accounts.google.com') || url.includes('googleapis.com')) {
-              failedRequests.push(`${request.failure()?.errorText || 'request failed'} ${url}`);
-            }
-          });
-
-          try {
-            const response = await page.goto('https://locaio.petertecnet.com.br/', {
-              waitUntil: 'networkidle2',
-              timeout: 45000,
-            });
-            if (!response?.ok()) throw new Error(`Locaio respondeu HTTP ${response?.status()}`);
-
-            await page.waitForFunction(() => {
-              const host = document.querySelector('.google-login');
-              if (!host) return false;
-              const iframe = host.querySelector('iframe');
-              const candidate = iframe || host.firstElementChild;
-              if (!candidate) return false;
-              const rect = candidate.getBoundingClientRect();
-              return rect.width > 100 && rect.height > 20;
-            }, { timeout: 20000 });
-
-            const state = await page.evaluate(() => {
-              const host = document.querySelector('.google-login');
-              const iframe = host?.querySelector('iframe');
-              return {
-                hostPresent: Boolean(host),
-                childCount: host?.childElementCount || 0,
-                iframeHost: iframe?.src ? new URL(iframe.src).hostname : null,
-              };
-            });
-            console.log('Google login DOM:', JSON.stringify(state));
-
-            const prohibited = /origin is not allowed|not a valid origin|invalid client|invalid_client|client id.*invalid/i;
-            const providerErrors = consoleErrors.filter((message) => prohibited.test(message));
-
-            if (failedRequests.length) {
-              throw new Error(`Falha ao carregar recursos Google: ${failedRequests.join(' | ')}`);
-            }
-            if (providerErrors.length) {
-              throw new Error(`Google rejeitou a configuração/origem: ${providerErrors.join(' | ')}`);
-            }
-          } finally {
-            await browser.close();
-          }
-          NODE
+          BROWSER="$BROWSER" SMOKE_SCOPE=google node scripts/production-smoke.mjs
