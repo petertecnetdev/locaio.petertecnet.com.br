@@ -10,7 +10,7 @@ import './auth-enhancements.css';
 import './brand.css';
 import './sidebar-redesign.css';
 import './navigation-enhancements.css';
-import './navigationEnhancements.js';
+import './navigationRuntime.js';
 
 installAuthenticatedDownloads();
 installProductionGuards();
