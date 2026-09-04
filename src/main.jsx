@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App.jsx';
+import App from './AppV2.jsx';
 import PeterAccountGateway from './components/PeterAccountGateway.jsx';
 import { API_BASE_URL, APP_SLUG } from './services/api.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
@@ -11,6 +11,7 @@ import './auth-enhancements.css';
 import './brand.css';
 import './visual-enhancements.css';
 import './dashboard-overview.css';
+import './design-system-v2.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
