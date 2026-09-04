@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './AppV2.jsx';
+import OperationalCommandBar from './components/OperationalCommandBar.jsx';
 import OperationsExperience from './components/OperationsExperience.jsx';
 import PortfolioIntelligence from './components/PortfolioIntelligence.jsx';
 import PeterAccountGateway from './components/PeterAccountGateway.jsx';
@@ -22,6 +23,7 @@ import './lease-onboarding-enhancements.css';
 import './property-management-enhancements.css';
 import './operations-experience.css';
 import './portfolio-intelligence.css';
+import './operational-command-bar.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
@@ -33,6 +35,7 @@ installPropertyManagementEnhancements();
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
+      <OperationalCommandBar />
       <PortfolioIntelligence />
       <OperationsExperience>
         <App />
