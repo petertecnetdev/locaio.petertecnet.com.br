@@ -10,6 +10,7 @@ import './styles.css';
 import './auth-enhancements.css';
 import './brand.css';
 import './visual-enhancements.css';
+import './dashboard-overview.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
