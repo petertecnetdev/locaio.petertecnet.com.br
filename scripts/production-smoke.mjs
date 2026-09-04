@@ -5,6 +5,7 @@ const BROWSER = process.env.BROWSER;
 const SCOPE = process.env.SMOKE_SCOPE || 'public';
 const E2E_TOKEN = process.env.LOCAIO_E2E_TOKEN || '';
 const E2E_USER = process.env.LOCAIO_E2E_USER || '';
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 if (!BROWSER) {
   throw new Error('BROWSER não informado.');
@@ -114,7 +115,7 @@ async function assertNavigationIfAuthenticated() {
   }, { token: E2E_TOKEN, user: E2E_USER });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#root > *', { visible: true });
-  await page.waitForTimeout(1200);
+  await sleep(1200);
   await assertHealthy('authenticated');
 
   const labels = await page.$$eval('button', (buttons) => buttons.map((button) => button.textContent?.trim()).filter(Boolean));
@@ -124,7 +125,7 @@ async function assertNavigationIfAuthenticated() {
       const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes(label));
       button?.click();
     }, target);
-    await page.waitForTimeout(300);
+    await sleep(300);
     await assertHealthy(`navigation:${target}`);
   }
 }
