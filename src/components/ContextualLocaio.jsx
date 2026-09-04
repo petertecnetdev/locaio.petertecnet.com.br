@@ -60,8 +60,8 @@ export default function ContextualLocaio() {
     const authenticated = Boolean(localStorage.getItem('token'));
     setHasToken(authenticated);
     if (!authenticated) {
-      setContexts([]);
-      setRole('landlord');
+      setContexts((current) => current.length ? [] : current);
+      setRole((current) => current === 'landlord' ? current : 'landlord');
       setContextRole(null);
       setLoading(false);
       return;
