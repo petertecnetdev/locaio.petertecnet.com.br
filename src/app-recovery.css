@@ -1,0 +1,126 @@
+.locaio-recovery {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(37, 99, 235, 0.18), transparent 32%),
+    radial-gradient(circle at 85% 80%, rgba(14, 165, 233, 0.12), transparent 30%),
+    #08111f;
+  color: #f8fafc;
+}
+
+.locaio-recovery-card {
+  width: min(100%, 620px);
+  padding: clamp(24px, 5vw, 42px);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 28px;
+  background: rgba(15, 23, 42, 0.9);
+  box-shadow: 0 30px 80px rgba(2, 6, 23, 0.45);
+  backdrop-filter: blur(18px);
+}
+
+.locaio-recovery-icon {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  margin-bottom: 18px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  font-size: 26px;
+}
+
+.locaio-recovery-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: #7dd3fc;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.locaio-recovery h1 {
+  margin: 0 0 12px;
+  font-size: clamp(1.65rem, 4vw, 2.45rem);
+  line-height: 1.08;
+}
+
+.locaio-recovery p {
+  margin: 0;
+  color: #cbd5e1;
+  line-height: 1.7;
+}
+
+.locaio-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 26px 0 16px;
+}
+
+.locaio-recovery button {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 18px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.locaio-recovery button.primary {
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  color: white;
+}
+
+.locaio-recovery button.secondary {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(30, 41, 59, 0.72);
+  color: #e2e8f0;
+}
+
+.locaio-recovery button:focus-visible {
+  outline: 3px solid rgba(125, 211, 252, 0.55);
+  outline-offset: 3px;
+}
+
+.locaio-recovery small {
+  display: block;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+@media (max-width: 560px) {
+  .locaio-recovery {
+    padding: 14px;
+  }
+
+  .locaio-recovery-card {
+    padding: 24px 20px;
+    border-radius: 22px;
+  }
+
+  .locaio-recovery-actions,
+  .locaio-recovery button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .locaio-recovery *,
+  .locaio-recovery *::before,
+  .locaio-recovery *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
