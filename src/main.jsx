@@ -12,8 +12,11 @@ import './brand.css';
 import './sidebar-redesign.css';
 import './navigation-enhancements.css';
 import './ui/leasing-experience.css';
+import './ui/finishing-touches.css';
 import './navigationRuntime.js';
 import './ui/leasingExperienceRuntime.js';
+import './ui/mediaFallbackRuntime.js';
+import './ui/journeyStagesRuntime.js';
 
 installAuthenticatedDownloads();
 installProductionGuards();
