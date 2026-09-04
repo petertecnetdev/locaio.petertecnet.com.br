@@ -6,11 +6,14 @@ import { API_BASE_URL, APP_SLUG } from './services/api.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installProductionGuards } from './productionGuards.js';
 import './styles.css';
+import './ui/design-system.css';
 import './auth-enhancements.css';
 import './brand.css';
 import './sidebar-redesign.css';
 import './navigation-enhancements.css';
+import './ui/leasing-experience.css';
 import './navigationRuntime.js';
+import './ui/leasingExperienceRuntime.js';
 
 installAuthenticatedDownloads();
 installProductionGuards();
