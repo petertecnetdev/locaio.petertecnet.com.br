@@ -5,12 +5,15 @@ import PeterAccountGateway from './components/PeterAccountGateway.jsx';
 import { API_BASE_URL, APP_SLUG } from './services/api.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installProductionGuards } from './productionGuards.js';
+import { installVisualEnhancements } from './visual-enhancements.js';
 import './styles.css';
 import './auth-enhancements.css';
 import './brand.css';
+import './visual-enhancements.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
+installVisualEnhancements();
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
