@@ -20,18 +20,26 @@ function loadScript({ selector, src, datasetKey, datasetValue, isReady, errorMes
       script.removeEventListener('load', onLoad);
       script.removeEventListener('error', onError);
     };
+    const fail = (message) => {
+      script.dataset.peterLoadState = 'failed';
+      reject(new Error(message));
+    };
     const onLoad = () => {
       cleanup();
-      if (isReady()) resolve();
-      else reject(new Error(`${errorMessage} O SDK carregou sem registrar os componentes esperados.`));
+      if (isReady()) {
+        script.dataset.peterLoadState = 'loaded';
+        resolve();
+      } else {
+        fail(`${errorMessage} O SDK carregou sem registrar os componentes esperados.`);
+      }
     };
     const onError = () => {
       cleanup();
-      reject(new Error(errorMessage));
+      fail(errorMessage);
     };
     const timeoutId = window.setTimeout(() => {
       cleanup();
-      reject(new Error(`${errorMessage} Tempo limite de carregamento excedido.`));
+      fail(`${errorMessage} Tempo limite de carregamento excedido.`);
     }, SCRIPT_LOAD_TIMEOUT_MS);
 
     script.addEventListener('load', onLoad, { once: true });
@@ -39,12 +47,17 @@ function loadScript({ selector, src, datasetKey, datasetValue, isReady, errorMes
   });
 
   const existing = document.querySelector(selector);
-  if (existing) return waitForScript(existing);
+  if (existing?.dataset.peterLoadState === 'failed') {
+    existing.remove();
+  } else if (existing) {
+    return waitForScript(existing);
+  }
 
   const script = document.createElement('script');
   script.src = src;
   script.async = true;
   script.dataset[datasetKey] = datasetValue;
+  script.dataset.peterLoadState = 'loading';
   const pending = waitForScript(script);
   document.head.appendChild(script);
   return pending;
