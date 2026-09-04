@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './AppV2.jsx';
 import OperationsExperience from './components/OperationsExperience.jsx';
+import PortfolioIntelligence from './components/PortfolioIntelligence.jsx';
 import PeterAccountGateway from './components/PeterAccountGateway.jsx';
 import { API_BASE_URL, APP_SLUG } from './services/api.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
@@ -18,6 +19,7 @@ import './design-system-v2.css';
 import './contract-profile-enhancements.css';
 import './lease-onboarding-enhancements.css';
 import './operations-experience.css';
+import './portfolio-intelligence.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
@@ -28,6 +30,7 @@ installLeaseOnboardingEnhancements();
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
+      <PortfolioIntelligence />
       <OperationsExperience>
         <App />
       </OperationsExperience>
