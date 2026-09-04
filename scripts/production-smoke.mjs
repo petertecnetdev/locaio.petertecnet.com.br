@@ -1,0 +1,154 @@
+import puppeteer from 'puppeteer-core';
+
+const BASE_URL = process.env.BASE_URL || 'https://locaio.petertecnet.com.br/';
+const BROWSER = process.env.BROWSER;
+const SCOPE = process.env.SMOKE_SCOPE || 'public';
+const E2E_TOKEN = process.env.LOCAIO_E2E_TOKEN || '';
+const E2E_USER = process.env.LOCAIO_E2E_USER || '';
+
+if (!BROWSER) {
+  throw new Error('BROWSER não informado.');
+}
+
+const browser = await puppeteer.launch({
+  executablePath: BROWSER,
+  headless: true,
+  args: ['--no-sandbox', '--disable-dev-shm-usage'],
+});
+
+const page = await browser.newPage();
+page.setDefaultTimeout(20000);
+page.setDefaultNavigationTimeout(30000);
+
+const pageErrors = [];
+const providerErrors = [];
+const criticalRequestFailures = [];
+const googleRequestFailures = [];
+
+const prohibitedGoogleError = /origin is not allowed|not a valid origin|invalid client|invalid_client|client id.*invalid/i;
+const criticalConsoleError = /uncaught|typeerror|referenceerror|syntaxerror|cannot read properties|failed to load module script/i;
+
+page.on('pageerror', (error) => pageErrors.push(error?.stack || error?.message || String(error)));
+page.on('console', (message) => {
+  const text = message.text();
+  console.log(`[browser:${message.type()}] ${text}`);
+  if (prohibitedGoogleError.test(text)) providerErrors.push(text);
+  if (message.type() === 'error' && criticalConsoleError.test(text)) pageErrors.push(text);
+});
+page.on('requestfailed', (request) => {
+  const url = request.url();
+  const failure = `${request.failure()?.errorText || 'request failed'} ${url}`;
+  if (url.includes('accounts.google.com') || url.includes('googleapis.com')) googleRequestFailures.push(failure);
+  try {
+    const host = new URL(url).hostname;
+    if ((host === 'locaio.petertecnet.com.br' || host === 'api.petertecnet.com.br') && request.failure()?.errorText !== 'net::ERR_ABORTED') {
+      criticalRequestFailures.push(failure);
+    }
+  } catch {
+    // Ignore malformed/non-network URLs.
+  }
+});
+
+async function navigate() {
+  const response = await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  if (!response || response.status() >= 400) {
+    throw new Error(`Locaio respondeu HTTP ${response?.status() ?? 'sem resposta'}.`);
+  }
+  await page.waitForSelector('#root > *', { visible: true });
+  await page.waitForFunction(() => (document.querySelector('#root')?.innerText || '').trim().length > 20);
+}
+
+async function assertHealthy(label) {
+  const state = await page.evaluate(() => ({
+    rootTextLength: (document.querySelector('#root')?.innerText || '').trim().length,
+    recoveryVisible: Boolean(document.querySelector('.locaio-recovery')),
+    width: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    shellVisible: Boolean(document.querySelector('.pt-app-shell')),
+    authVisible: Boolean(document.querySelector('.auth-page')),
+  }));
+  console.log(`${label}:`, JSON.stringify(state));
+  if (state.rootTextLength < 20) throw new Error(`${label}: raiz da aplicação sem conteúdo útil.`);
+  if (state.recoveryVisible) throw new Error(`${label}: AppRecoveryBoundary foi acionado.`);
+  if (state.scrollWidth > state.width + 24) throw new Error(`${label}: overflow horizontal excessivo (${state.scrollWidth}px > ${state.width}px).`);
+}
+
+async function assertGoogleLogin() {
+  const authVisible = await page.$('.auth-page');
+  if (!authVisible) {
+    console.log('Google login: sessão autenticada detectada; check público do botão ignorado.');
+    return;
+  }
+
+  await page.waitForSelector('.google-login');
+  await page.waitForFunction(() => {
+    const host = document.querySelector('.google-login');
+    if (!host) return false;
+    const candidate = host.querySelector('iframe') || host.firstElementChild;
+    if (!candidate) return false;
+    const rect = candidate.getBoundingClientRect();
+    return rect.width > 100 && rect.height > 20;
+  }, { timeout: 20000 });
+
+  const state = await page.evaluate(() => {
+    const host = document.querySelector('.google-login');
+    const iframe = host?.querySelector('iframe');
+    return {
+      hostPresent: Boolean(host),
+      childCount: host?.childElementCount || 0,
+      iframeHost: iframe?.src ? new URL(iframe.src).hostname : null,
+    };
+  });
+  console.log('Google login DOM:', JSON.stringify(state));
+
+  if (googleRequestFailures.length) throw new Error(`Falha ao carregar recursos Google: ${googleRequestFailures.join(' | ')}`);
+  if (providerErrors.length) throw new Error(`Google rejeitou configuração/origem: ${providerErrors.join(' | ')}`);
+}
+
+async function assertNavigationIfAuthenticated() {
+  if (!E2E_TOKEN) return;
+
+  await page.evaluate(({ token, user }) => {
+    localStorage.setItem('token', token);
+    if (user) localStorage.setItem('user', user);
+  }, { token: E2E_TOKEN, user: E2E_USER });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#root > *', { visible: true });
+  await page.waitForTimeout(1200);
+  await assertHealthy('authenticated');
+
+  const labels = await page.$$eval('button', (buttons) => buttons.map((button) => button.textContent?.trim()).filter(Boolean));
+  const targets = ['Visão geral', 'Imóveis', 'Locações'].filter((label) => labels.some((text) => text.includes(label)));
+  for (const target of targets) {
+    await page.evaluate((label) => {
+      const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes(label));
+      button?.click();
+    }, target);
+    await page.waitForTimeout(300);
+    await assertHealthy(`navigation:${target}`);
+  }
+}
+
+try {
+  await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+  await navigate();
+  await assertHealthy('desktop');
+
+  if (SCOPE === 'google' || SCOPE === 'all') await assertGoogleLogin();
+
+  if (SCOPE === 'public' || SCOPE === 'all') {
+    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#root > *', { visible: true });
+    await assertHealthy('mobile');
+  }
+
+  if (SCOPE === 'authenticated' || SCOPE === 'all') await assertNavigationIfAuthenticated();
+
+  if (pageErrors.length) throw new Error(`Erros críticos de JavaScript: ${pageErrors.join(' | ')}`);
+  if (criticalRequestFailures.length) throw new Error(`Falhas críticas de rede: ${criticalRequestFailures.join(' | ')}`);
+
+  console.log(`Smoke de produção concluído com sucesso (scope=${SCOPE}).`);
+} finally {
+  await browser.close();
+}
