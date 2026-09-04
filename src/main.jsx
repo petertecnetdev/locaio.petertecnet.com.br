@@ -7,7 +7,8 @@ import OperationsExperience from './components/OperationsExperience.jsx';
 import PortfolioIntelligence from './components/PortfolioIntelligence.jsx';
 import PropertyWorkspace from './components/PropertyWorkspace.jsx';
 import PeterAccountGateway from './components/PeterAccountGateway.jsx';
-import { API_BASE_URL, APP_SLUG } from './services/api.js';
+import api, { API_BASE_URL, APP_SLUG } from './services/api.js';
+import { installContextualAccessRuntime } from './services/contextualAccess.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installProductionGuards } from './productionGuards.js';
 import { installVisualEnhancements } from './visual-enhancements.js';
@@ -31,6 +32,7 @@ import './operational-command-bar.css';
 import './contract-workflow.css';
 import './public-signature.css';
 
+installContextualAccessRuntime(api);
 installAuthenticatedDownloads();
 installProductionGuards();
 installVisualEnhancements();
