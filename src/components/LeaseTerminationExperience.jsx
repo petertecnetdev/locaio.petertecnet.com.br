@@ -168,9 +168,9 @@ export default function LeaseTerminationExperience() {
   useEffect(() => {
     let button = null;
     const sync = () => {
-      const shell = document.querySelector('.pw-shell');
+      const shell = window.document.querySelector('.pw-shell');
       const actions = shell?.querySelector('.pw-top-actions');
-      document.querySelectorAll('[data-lease-termination-trigger]').forEach((item) => {
+      window.document.querySelectorAll('[data-lease-termination-trigger]').forEach((item) => {
         if (item !== button && !actions?.contains(item)) item.remove();
       });
       if (!actions || !eligible || !propertyId) {
@@ -178,7 +178,7 @@ export default function LeaseTerminationExperience() {
       }
       button = actions.querySelector('[data-lease-termination-trigger]');
       if (!button) {
-        button = document.createElement('button');
+        button = window.document.createElement('button');
         button.type = 'button';
         button.className = 'pw-button ghost lt-workspace-trigger';
         button.dataset.leaseTerminationTrigger = String(propertyId);
@@ -191,17 +191,17 @@ export default function LeaseTerminationExperience() {
     };
     sync();
     const observer = new MutationObserver(sync);
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(window.document.body, { childList: true, subtree: true });
     return () => { observer.disconnect(); button?.remove(); };
   }, [eligible, lease, loadDetails, propertyId]);
 
   useEffect(() => {
     if (!open) return undefined;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const previous = window.document.body.style.overflow;
+    window.document.body.style.overflow = 'hidden';
     const onKey = (event) => { if (event.key === 'Escape' && !busy) setOpen(false); };
     window.addEventListener('keydown', onKey);
-    return () => { document.body.style.overflow = previous; window.removeEventListener('keydown', onKey); };
+    return () => { window.document.body.style.overflow = previous; window.removeEventListener('keydown', onKey); };
   }, [busy, open]);
 
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
