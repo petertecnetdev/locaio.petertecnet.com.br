@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import AppRecoveryBoundary from './components/AppRecoveryBoundary.jsx';
 import ContextualLocaio from './components/ContextualLocaio.jsx';
 import PublicSignaturePage from './PublicSignaturePage.jsx';
 import PeterAccountGateway from './components/PeterAccountGateway.jsx';
@@ -28,6 +29,7 @@ import './contract-workflow.css';
 import './public-signature.css';
 import './account-center.css';
 import './contextual-locaio.css';
+import './app-recovery.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
@@ -42,12 +44,14 @@ const root = createRoot(document.getElementById('root'));
 
 root.render(
   <StrictMode>
-    {signatureMatch ? (
-      <PublicSignaturePage token={signatureMatch[1]} />
-    ) : (
-      <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
-        <ContextualLocaio />
-      </PeterAccountGateway>
-    )}
+    <AppRecoveryBoundary>
+      {signatureMatch ? (
+        <PublicSignaturePage token={signatureMatch[1]} />
+      ) : (
+        <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
+          <ContextualLocaio />
+        </PeterAccountGateway>
+      )}
+    </AppRecoveryBoundary>
   </StrictMode>,
 );
