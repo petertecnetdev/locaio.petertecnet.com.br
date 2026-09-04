@@ -37,20 +37,24 @@ function AccountCenterSession() {
   const [sessionState, setSessionState] = useState(readSession);
 
   useEffect(() => {
-    let frame = 0;
+    let lastSession = readSession();
     const sync = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => setSessionState(readSession()));
+      const nextSession = readSession();
+      if (nextSession === lastSession) return;
+      lastSession = nextSession;
+      setSessionState(nextSession);
     };
 
     window.addEventListener('authChanged', sync);
     window.addEventListener('storage', sync);
 
+    // O launcher do ecossistema pode atualizar a sessão fora do fluxo React.
+    // Mantemos a compatibilidade, mas só atualizamos estado quando o token
+    // realmente muda, evitando requestAnimationFrame a cada mutação visual.
     const observer = new MutationObserver(sync);
     observer.observe(document.body, { childList: true, subtree: true });
 
     return () => {
-      cancelAnimationFrame(frame);
       window.removeEventListener('authChanged', sync);
       window.removeEventListener('storage', sync);
       observer.disconnect();
