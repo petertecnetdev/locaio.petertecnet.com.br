@@ -82,6 +82,7 @@ export const storeSession = (response) => {
   localStorage.setItem('token', token);
   const user = response?.data?.token?.user || response?.data?.user;
   if (user) localStorage.setItem('user', JSON.stringify(user));
+  else localStorage.removeItem('user');
   window.dispatchEvent(new Event('authChanged'));
   return token;
 };
