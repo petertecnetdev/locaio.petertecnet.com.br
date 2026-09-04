@@ -5,6 +5,7 @@ import '../lease-termination.css';
 import LeaseTerminationExperience from './LeaseTerminationExperience.jsx';
 import OperationalCommandBar from './OperationalCommandBar.jsx';
 import OperationsExperience from './OperationsExperience.jsx';
+import PaymentReceivingCenter from './PaymentReceivingCenter.jsx';
 import PortfolioIntelligence from './PortfolioIntelligence.jsx';
 import PropertyWorkspace from './PropertyWorkspace.jsx';
 import UserAccountCenter from './UserAccountCenter.jsx';
@@ -45,6 +46,7 @@ function OwnerExperience() {
     <LeaseTerminationExperience />
     <OperationalCommandBar />
     <PortfolioIntelligence />
+    <PaymentReceivingCenter />
     <AccountCenterSession />
     <OperationsExperience>
       <App />
