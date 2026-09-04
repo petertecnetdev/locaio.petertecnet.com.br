@@ -1,5 +1,6 @@
 import { Component } from 'react';
 import { FiAlertTriangle, FiRefreshCw, FiShield } from 'react-icons/fi';
+import { recoverFromChunkLoadError } from '../services/chunkRecovery.js';
 
 const SESSION_KEYS = ['token', 'access_token', 'auth_token', 'user'];
 
@@ -14,6 +15,7 @@ export default class AppRecoveryBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
+    if (recoverFromChunkLoadError(error)) return;
     console.error('[Locaio] Falha global de interface isolada pelo recovery boundary.', error, info);
   }
 
