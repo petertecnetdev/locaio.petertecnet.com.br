@@ -7,11 +7,6 @@ import PeterAccountGateway from './components/PeterAccountGateway.jsx';
 import { API_BASE_URL, APP_SLUG } from './services/api.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installProductionGuards } from './productionGuards.js';
-import { installVisualEnhancements } from './visual-enhancements.js';
-import { installContractProfileEnhancements } from './contract-profile-enhancements.js';
-import { installLeaseOnboardingEnhancements } from './lease-onboarding-enhancements.js';
-import { installPropertyManagementEnhancements } from './property-management-enhancements.js';
-import { installPropertyWorkspaceBridge } from './property-workspace-bridge.js';
 import './styles.css';
 import './auth-enhancements.css';
 import './brand.css';
@@ -33,11 +28,6 @@ import './app-recovery.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
-installVisualEnhancements();
-installContractProfileEnhancements();
-installLeaseOnboardingEnhancements();
-installPropertyManagementEnhancements();
-installPropertyWorkspaceBridge();
 
 const signatureMatch = window.location.pathname.match(/^\/sign\/([A-Za-z0-9]{40,128})\/?$/);
 const root = createRoot(document.getElementById('root'));
@@ -55,3 +45,44 @@ root.render(
     </AppRecoveryBoundary>
   </StrictMode>,
 );
+
+async function installOptionalEnhancements() {
+  if (signatureMatch) return;
+
+  try {
+    const [
+      visual,
+      contractProfile,
+      leaseOnboarding,
+      propertyManagement,
+      propertyWorkspace,
+    ] = await Promise.all([
+      import('./visual-enhancements.js'),
+      import('./contract-profile-enhancements.js'),
+      import('./lease-onboarding-enhancements.js'),
+      import('./property-management-enhancements.js'),
+      import('./property-workspace-bridge.js'),
+    ]);
+
+    visual.installVisualEnhancements();
+    contractProfile.installContractProfileEnhancements();
+    leaseOnboarding.installLeaseOnboardingEnhancements();
+    propertyManagement.installPropertyManagementEnhancements();
+    propertyWorkspace.installPropertyWorkspaceBridge();
+  } catch (error) {
+    // Esses recursos refinam a experiência, mas não podem impedir login,
+    // dashboard, assinatura pública ou navegação principal.
+    console.error('[Locaio] Não foi possível carregar melhorias opcionais.', error);
+  }
+}
+
+// O primeiro paint, a autenticação e o dashboard são prioritários. Os módulos
+// DOM-enhancement entram depois, em chunks separados, quando o navegador estiver
+// ocioso ou após um pequeno limite para garantir disponibilidade em máquinas ocupadas.
+if (!signatureMatch) {
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(() => installOptionalEnhancements(), { timeout: 1400 });
+  } else {
+    window.setTimeout(() => installOptionalEnhancements(), 700);
+  }
+}
