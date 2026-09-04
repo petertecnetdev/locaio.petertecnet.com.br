@@ -38,11 +38,15 @@ page.on('console', (message) => {
 });
 page.on('requestfailed', (request) => {
   const url = request.url();
-  const failure = `${request.failure()?.errorText || 'request failed'} ${url}`;
-  if (url.includes('accounts.google.com') || url.includes('googleapis.com')) googleRequestFailures.push(failure);
+  const errorText = request.failure()?.errorText || 'request failed';
+  const failure = `${errorText} ${url}`;
+  const isBenignAbort = errorText === 'net::ERR_ABORTED';
+  if ((url.includes('accounts.google.com') || url.includes('googleapis.com')) && !isBenignAbort) {
+    googleRequestFailures.push(failure);
+  }
   try {
     const host = new URL(url).hostname;
-    if ((host === 'locaio.petertecnet.com.br' || host === 'api.petertecnet.com.br') && request.failure()?.errorText !== 'net::ERR_ABORTED') {
+    if ((host === 'locaio.petertecnet.com.br' || host === 'api.petertecnet.com.br') && !isBenignAbort) {
       criticalRequestFailures.push(failure);
     }
   } catch {
@@ -102,6 +106,9 @@ async function assertGoogleLogin() {
   });
   console.log('Google login DOM:', JSON.stringify(state));
 
+  if (state.iframeHost && state.iframeHost !== 'accounts.google.com') {
+    throw new Error(`Google login renderizado por host inesperado: ${state.iframeHost}`);
+  }
   if (googleRequestFailures.length) throw new Error(`Falha ao carregar recursos Google: ${googleRequestFailures.join(' | ')}`);
   if (providerErrors.length) throw new Error(`Google rejeitou configuração/origem: ${providerErrors.join(' | ')}`);
 }
