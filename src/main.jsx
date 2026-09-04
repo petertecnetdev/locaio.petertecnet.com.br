@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client';
 import App from './AppV2.jsx';
 import OperationsExperience from './components/OperationsExperience.jsx';
 import PeterAccountGateway from './components/PeterAccountGateway.jsx';
-import { API_BASE_URL, APP_SLUG } from './services/api.js';
+import api, { API_BASE_URL, APP_SLUG } from './services/api.js';
+import { installContextualAccessRuntime } from './services/contextualAccess.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installProductionGuards } from './productionGuards.js';
 import { installVisualEnhancements } from './visual-enhancements.js';
@@ -17,6 +18,7 @@ import './design-system-v2.css';
 import './contract-profile-enhancements.css';
 import './operations-experience.css';
 
+installContextualAccessRuntime(api);
 installAuthenticatedDownloads();
 installProductionGuards();
 installVisualEnhancements();
