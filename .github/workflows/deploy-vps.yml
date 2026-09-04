@@ -10,7 +10,32 @@ permissions:
   contents: read
 
 jobs:
+  deploy-preflight:
+    name: Validate deployment configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require VPS deployment secrets
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "$VPS_HOST" ]] || missing+=(VPS_HOST)
+          [[ -n "$VPS_USER" ]] || missing+=(VPS_USER)
+          [[ -n "$VPS_SSH_KEY" ]] || missing+=(VPS_SSH_KEY)
+
+          if (( ${#missing[@]} > 0 )); then
+            printf '::error::Deploy automático bloqueado: configure os secrets ausentes: %s\n' "${missing[*]}"
+            exit 1
+          fi
+
+          echo 'Configuração de deploy disponível.'
+
   deploy:
+    needs: deploy-preflight
     uses: petertecnetdev/petertecnet.com.br/.github/workflows/reusable-vps-deploy.yml@main
     with:
       deploy_path: /var/www/locaio.petertecnet.com.br
@@ -22,3 +47,45 @@ jobs:
       VPS_PORT: ${{ secrets.VPS_PORT }}
       VPS_USER: ${{ secrets.VPS_USER }}
       VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+
+  verify-release:
+    name: Verify exact production release
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm production commit
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          RELEASE_URL: https://locaio.petertecnet.com.br/release.json
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 12); do
+            release="$(curl --fail --silent --show-error --location --max-time 15 \
+              -H 'Cache-Control: no-cache' \
+              "${RELEASE_URL}?expected=${EXPECTED_SHA}&attempt=${attempt}" || true)"
+
+            published_sha="$(RELEASE_JSON="$release" python3 - <<'PY'
+          import json
+          import os
+
+          try:
+              payload = json.loads(os.environ.get('RELEASE_JSON', ''))
+              print(payload.get('commit', ''))
+          except Exception:
+              print('')
+          PY
+            )"
+
+            if [[ "$published_sha" == "$EXPECTED_SHA" ]]; then
+              echo "Produção confirmada no commit $EXPECTED_SHA."
+              exit 0
+            fi
+
+            echo "Tentativa $attempt/12: produção=${published_sha:-indisponível}, esperado=$EXPECTED_SHA"
+            sleep 5
+          done
+
+          echo "::error::O workflow terminou o deploy sem conseguir comprovar que a produção executa o commit $EXPECTED_SHA."
+          exit 1
