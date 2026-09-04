@@ -2,6 +2,26 @@ import api, { appApi } from './services/api.js';
 
 const DRAFT_KEY = 'locaio:contract-profile:draft';
 const expenseLabels = { identity: 'Documento de identidade', address: 'Comprovante de endereço', income: 'Comprovante de renda', other: 'Outro documento' };
+const TEMPLATE_OPTIONS = {
+  residential_reference_v1: {
+    label: 'Residencial completo',
+    description: 'Imóvel residencial inteiro, com vistoria, caução opcional e aditivo de segurança.',
+    occupancy_type: 'whole_property',
+    purpose: 'residential',
+  },
+  commercial_reference_v1: {
+    label: 'Comercial completo',
+    description: 'Imóvel comercial inteiro, com finalidade empresarial, licenças, caução e regras operacionais.',
+    occupancy_type: 'whole_property',
+    purpose: 'commercial',
+  },
+  shared_suite_reference_v1: {
+    label: 'Suíte/quarto em casa compartilhada',
+    description: 'Unidade privativa dentro de imóvel compartilhado, com áreas comuns e regras de convivência.',
+    occupancy_type: 'shared_unit',
+    purpose: 'residential',
+  },
+};
 let latestLeaseDetail = null;
 let installed = false;
 let inviteProcessed = false;
@@ -13,6 +33,45 @@ const draft = () => parse(sessionStorage.getItem(DRAFT_KEY), {});
 const saveDraft = (value) => sessionStorage.setItem(DRAFT_KEY, JSON.stringify(value || {}));
 const clean = (value) => String(value ?? '').trim();
 const currentUser = () => parse(localStorage.getItem('user'), {});
+const checked = (value) => value ? 'checked' : '';
+const selected = (current, value) => current === value ? 'selected' : '';
+const esc = (value) => String(value ?? '').replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
+function defaultContract(template = 'residential_reference_v1') {
+  const preset = TEMPLATE_OPTIONS[template] || TEMPLATE_OPTIONS.residential_reference_v1;
+  const shared = preset.occupancy_type === 'shared_unit';
+  const commercial = preset.purpose === 'commercial';
+  return {
+    template,
+    occupancy_type: preset.occupancy_type,
+    deposit_mode: 'last_months_credit',
+    renewal_notice_month: shared ? 5 : 10,
+    iptu_monthly_amount: '',
+    inspection_required: true,
+    security_system_access: !shared,
+    forum: '',
+    exclusive_area: shared ? 'Suíte individual, composta por quarto e banheiro de uso exclusivo' : '',
+    shared_areas: shared ? 'Cozinha, sala, garagem e área de lazer' : '',
+    utilities_included: shared ? ['water', 'electricity', 'iptu', 'internet'] : [],
+    daily_rate_enabled: false,
+    daily_rate_amount: '',
+    visitors_policy: shared ? 'Visitantes e hóspedes somente mediante autorização prévia do locador e respeito às regras de convivência.' : '',
+    noise_policy: shared ? 'Festas, aglomerações e ruído excessivo são proibidos; deve ser respeitado o sossego dos demais moradores.' : '',
+    pets_policy: shared ? 'Animais somente quando expressamente autorizados pelo locador.' : '',
+    smoking_policy: shared ? 'É proibido fumar nas áreas internas; nas áreas externas deve ser preservada a limpeza e o bem-estar dos demais moradores.' : '',
+    common_area_policy: shared ? 'Após o uso, as áreas comuns devem ser deixadas limpas, organizadas e em condições de uso.' : '',
+    concurrent_tenants_allowed: shared,
+    business_use_description: commercial ? 'Atividade comercial informada pelo locatário' : '',
+    business_licenses_required: commercial,
+    business_licenses_responsibility: commercial ? 'tenant' : '',
+  };
+}
+
+function normalizeContract(input = {}) {
+  const requested = clean(input.template) || 'residential_reference_v1';
+  const template = TEMPLATE_OPTIONS[requested] ? requested : 'residential_reference_v1';
+  return { ...defaultContract(template), ...input, template, occupancy_type: TEMPLATE_OPTIONS[template].occupancy_type };
+}
 
 function profileFromLease(detail) {
   const lease = detail?.lease || {};
@@ -33,111 +92,169 @@ function profileFromLease(detail) {
       state: metadata?.tenant_profile?.state || '',
       postal_code: metadata?.tenant_profile?.postal_code || '',
     },
-    contract: {
-      template: metadata?.contract?.template || 'residential_reference_v1',
-      deposit_mode: metadata?.contract?.deposit_mode || 'last_months_credit',
-      renewal_notice_month: metadata?.contract?.renewal_notice_month || 10,
-      iptu_monthly_amount: metadata?.contract?.iptu_monthly_amount || '',
-      inspection_required: metadata?.contract?.inspection_required !== false,
-      security_system_access: metadata?.contract?.security_system_access === true,
-      forum: metadata?.contract?.forum || '',
-    },
+    contract: normalizeContract(metadata?.contract || {}),
   };
 }
 
 function field(label, name, value = '', type = 'text', attrs = '') {
-  return `<label>${label}<input data-profile-field="${name}" name="${name}" type="${type}" value="${String(value ?? '').replaceAll('&', '&amp;').replaceAll('"', '&quot;')}" ${attrs}></label>`;
+  return `<label>${label}<input data-profile-field="${name}" name="${name}" type="${type}" value="${esc(value)}" ${attrs}></label>`;
+}
+function contractField(label, name, value = '', type = 'text', attrs = '') {
+  return `<label>${label}<input data-contract-value="${name}" name="${name}" type="${type}" value="${esc(value)}" ${attrs}></label>`;
+}
+
+function templateOptions(current) {
+  return Object.entries(TEMPLATE_OPTIONS).map(([value, preset]) =>
+    `<option value="${value}" ${selected(current, value)}>${preset.label}</option>`
+  ).join('');
+}
+
+function templateSpecificFields(contract) {
+  if (contract.template === 'shared_suite_reference_v1') {
+    return `
+      <div class="pt-contract-template-specific" data-template-fields="shared">
+        <h4>Suíte/unidade privativa e áreas compartilhadas</h4>
+        <div class="pt-contract-profile-grid">
+          <label class="span-2">Área de uso exclusivo<input data-contract-value="exclusive_area" value="${esc(contract.exclusive_area)}"></label>
+          <label class="span-2">Áreas compartilhadas<input data-contract-value="shared_areas" value="${esc(contract.shared_areas)}"></label>
+          <label class="pt-contract-check"><input data-contract-check="concurrent_tenants_allowed" type="checkbox" ${checked(contract.concurrent_tenants_allowed)}> Permitir outros locatários no mesmo imóvel</label>
+          <label class="pt-contract-check"><input data-contract-check="daily_rate_enabled" type="checkbox" ${checked(contract.daily_rate_enabled)}> Permitir diária alternativa</label>
+          ${contractField('Valor da diária (R$)', 'daily_rate_amount', contract.daily_rate_amount, 'number', 'min="0" step="0.01"')}
+        </div>
+        <h4>Regras de convivência</h4>
+        <div class="pt-contract-profile-grid">
+          <label class="span-2">Visitantes e hóspedes<input data-contract-value="visitors_policy" value="${esc(contract.visitors_policy)}"></label>
+          <label class="span-2">Som, festas e silêncio<input data-contract-value="noise_policy" value="${esc(contract.noise_policy)}"></label>
+          <label class="span-2">Animais<input data-contract-value="pets_policy" value="${esc(contract.pets_policy)}"></label>
+          <label class="span-2">Fumo<input data-contract-value="smoking_policy" value="${esc(contract.smoking_policy)}"></label>
+          <label class="span-2">Limpeza das áreas comuns<input data-contract-value="common_area_policy" value="${esc(contract.common_area_policy)}"></label>
+        </div>
+        <p class="pt-contract-flow-hint">Água, energia, IPTU e internet podem ser marcados como incluídos na própria locação. O contrato registra automaticamente as despesas incluídas.</p>
+      </div>`;
+  }
+  if (contract.template === 'commercial_reference_v1') {
+    return `
+      <div class="pt-contract-template-specific" data-template-fields="commercial">
+        <h4>Finalidade comercial</h4>
+        <div class="pt-contract-profile-grid">
+          <label class="span-2">Atividade/uso autorizado<input data-contract-value="business_use_description" value="${esc(contract.business_use_description)}" placeholder="Ex.: loja de móveis, engenharia, restaurante, delivery"></label>
+          <label class="pt-contract-check"><input data-contract-check="business_licenses_required" type="checkbox" ${checked(contract.business_licenses_required)}> Exigir licenças e regularização da atividade pelo locatário</label>
+        </div>
+      </div>`;
+  }
+  return `<div class="pt-contract-template-specific"><p class="pt-contract-flow-hint">Modelo residencial completo baseado no contrato de referência mais recente, com dados dinâmicos, vistoria, caução e aditivo opcional de segurança.</p></div>`;
+}
+
+function collectContractValues(root, fallback = {}) {
+  const values = { ...fallback };
+  values.template = root.querySelector('[data-template-selector]')?.value || fallback.template || 'residential_reference_v1';
+  values.deposit_mode = root.querySelector('[data-contract-field="deposit_mode"]')?.value || fallback.deposit_mode || 'last_months_credit';
+  root.querySelectorAll('[data-contract-value]').forEach((input) => {
+    const name = input.dataset.contractValue;
+    values[name] = input.type === 'number' ? (input.value === '' ? '' : Number(input.value)) : clean(input.value);
+  });
+  root.querySelectorAll('[data-contract-check]').forEach((input) => { values[input.dataset.contractCheck] = Boolean(input.checked); });
+  values.occupancy_type = TEMPLATE_OPTIONS[values.template]?.occupancy_type || 'whole_property';
+  return values;
 }
 
 function openProfileDialog({ mode = 'draft', detail = latestLeaseDetail } = {}) {
   document.querySelector('.pt-contract-profile-dialog')?.remove();
-  const values = mode === 'edit' ? profileFromLease(detail) : { ...profileFromLease(null), ...draft() };
-  const tenant = values.tenant_profile || {};
-  const contract = values.contract || {};
+  const stored = mode === 'edit' ? profileFromLease(detail) : { ...profileFromLease(null), ...draft() };
+  const tenant = stored.tenant_profile || {};
+  let contract = normalizeContract(stored.contract || {});
   const lease = detail?.lease || {};
 
   const overlay = document.createElement('div');
   overlay.className = 'pt-contract-profile-dialog';
-  overlay.innerHTML = `<div class="pt-contract-profile-panel" role="dialog" aria-modal="true" aria-label="Dados completos para o contrato">
-    <header><div><span>Contrato inteligente</span><h2>Dados completos do contrato</h2><p>Os dados do locador vêm da conta Peter Tecnet. Os dados do inquilino podem ser preenchidos pelo próprio inquilino e conferidos com os documentos enviados.</p></div><button type="button" data-close aria-label="Fechar">×</button></header>
-    <div class="pt-contract-profile-scroll">
-      <section><h3>Qualificação do inquilino</h3><div class="pt-contract-profile-grid">
-        ${field('Data de nascimento', 'birthdate', tenant.birthdate, 'date')}
-        ${field('Naturalidade', 'birthplace', tenant.birthplace, 'text', 'placeholder="Ex.: Goiânia/GO"')}
-        ${field('Tipo do documento', 'document_type', tenant.document_type, 'text', 'placeholder="RG ou CNH"')}
-        ${field('Número do documento', 'document_number', tenant.document_number)}
-        ${field('Órgão expedidor', 'document_issuer', tenant.document_issuer, 'text', 'placeholder="Ex.: DETRAN/GO"')}
-        ${field('Estado civil', 'marital_status', tenant.marital_status)}
-        ${field('Profissão', 'occupation', tenant.occupation)}
-        ${field('Filiação 1', 'parent_1', tenant.parent_1)}
-        ${field('Filiação 2', 'parent_2', tenant.parent_2)}
-      </div></section>
-      <section><h3>Endereço atual do inquilino</h3><div class="pt-contract-profile-grid">
-        <label class="span-2">Endereço completo<input data-profile-field="address" value="${String(tenant.address || '').replaceAll('"', '&quot;')}" placeholder="Rua, número, complemento e bairro"></label>
-        ${field('Cidade', 'city', tenant.city)}
-        ${field('UF', 'state', tenant.state, 'text', 'maxlength="2"')}
-        ${field('CEP', 'postal_code', tenant.postal_code)}
-      </div></section>
-      <section><h3>Regras do modelo-base</h3><div class="pt-contract-profile-grid">
-        <label>Tratamento da caução<select data-contract-field="deposit_mode"><option value="last_months_credit" ${contract.deposit_mode === 'last_months_credit' ? 'selected' : ''}>Abater nos últimos aluguéis</option><option value="settlement" ${contract.deposit_mode === 'settlement' ? 'selected' : ''}>Acerto ao final</option></select></label>
-        ${field('Manifestar renovação até o mês', 'renewal_notice_month', contract.renewal_notice_month || 10, 'number', 'min="1" max="120" data-contract-input')}
-        ${field('IPTU mensal separado (R$)', 'iptu_monthly_amount', contract.iptu_monthly_amount, 'number', 'min="0" step="0.01" data-contract-input')}
-        ${field('Foro', 'forum', contract.forum, 'text', 'placeholder="Ex.: Goiânia/GO" data-contract-input')}
-        <label class="pt-contract-check"><input data-contract-check="inspection_required" type="checkbox" ${contract.inspection_required !== false ? 'checked' : ''}> Vistoria inicial/final como referência</label>
-        <label class="pt-contract-check"><input data-contract-check="security_system_access" type="checkbox" ${contract.security_system_access ? 'checked' : ''}> Prever acesso para manutenção de sistemas de segurança</label>
-      </div></section>
-      ${mode === 'edit' ? `<div class="pt-profile-current"><b>Pacote atual:</b> ${lease.tenant_name || 'inquilino'} · versão ${lease.contract_version || 1}. Ao gerar novamente, os 3 documentos recebem uma nova versão conjunta.</div>` : ''}
-    </div>
-    <footer><button type="button" class="pt-button secondary" data-close>Cancelar</button><button type="button" class="pt-button primary" data-save>${mode === 'edit' ? 'Salvar dados do contrato' : 'Usar estes dados'}</button></footer>
-  </div>`;
-  document.body.appendChild(overlay);
 
-  const close = () => overlay.remove();
-  overlay.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', close));
-  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
-  overlay.querySelector('[data-save]')?.addEventListener('click', async (event) => {
-    const tenantProfile = {};
-    overlay.querySelectorAll('[data-profile-field]').forEach((input) => { tenantProfile[input.dataset.profileField] = clean(input.value); });
-    const renewalInput = overlay.querySelector('[name="renewal_notice_month"]');
-    const iptuInput = overlay.querySelector('[name="iptu_monthly_amount"]');
-    const forumInput = overlay.querySelector('[name="forum"]');
-    const payload = {
-      tenant_profile: tenantProfile,
-      contract: {
-        template: 'residential_reference_v1',
-        deposit_mode: overlay.querySelector('[data-contract-field="deposit_mode"]')?.value || 'last_months_credit',
-        renewal_notice_month: Number(renewalInput?.value || 10),
-        iptu_monthly_amount: Number(iptuInput?.value || 0),
-        inspection_required: Boolean(overlay.querySelector('[data-contract-check="inspection_required"]')?.checked),
-        security_system_access: Boolean(overlay.querySelector('[data-contract-check="security_system_access"]')?.checked),
-        forum: clean(forumInput?.value),
-      },
-    };
+  const render = () => {
+    overlay.innerHTML = `<div class="pt-contract-profile-panel" role="dialog" aria-modal="true" aria-label="Dados completos para o contrato">
+      <header><div><span>Contrato inteligente</span><h2>Dados completos do contrato</h2><p>Escolha o modelo de ocupação. Os dados do locador vêm da conta Peter Tecnet; os do inquilino são preenchidos dinamicamente e podem ser conferidos com os documentos enviados.</p></div><button type="button" data-close aria-label="Fechar">×</button></header>
+      <div class="pt-contract-profile-scroll">
+        <section><h3>Modelo da locação</h3><div class="pt-contract-profile-grid">
+          <label class="span-2">Tipo de contrato<select data-template-selector>${templateOptions(contract.template)}</select><small>${esc(TEMPLATE_OPTIONS[contract.template]?.description)}</small></label>
+        </div></section>
+        <section><h3>Qualificação do inquilino</h3><div class="pt-contract-profile-grid">
+          ${field('Data de nascimento', 'birthdate', tenant.birthdate, 'date')}
+          ${field('Naturalidade', 'birthplace', tenant.birthplace, 'text', 'placeholder="Ex.: Goiânia/GO"')}
+          ${field('Tipo do documento', 'document_type', tenant.document_type, 'text', 'placeholder="RG ou CNH"')}
+          ${field('Número do documento', 'document_number', tenant.document_number)}
+          ${field('Órgão expedidor', 'document_issuer', tenant.document_issuer, 'text', 'placeholder="Ex.: DETRAN/GO"')}
+          ${field('Estado civil', 'marital_status', tenant.marital_status)}
+          ${field('Profissão', 'occupation', tenant.occupation)}
+          ${field('Filiação 1', 'parent_1', tenant.parent_1)}
+          ${field('Filiação 2', 'parent_2', tenant.parent_2)}
+        </div></section>
+        <section><h3>Endereço atual do inquilino</h3><div class="pt-contract-profile-grid">
+          <label class="span-2">Endereço completo<input data-profile-field="address" value="${esc(tenant.address)}" placeholder="Rua, número, complemento e bairro"></label>
+          ${field('Cidade', 'city', tenant.city)}
+          ${field('UF', 'state', tenant.state, 'text', 'maxlength="2"')}
+          ${field('CEP', 'postal_code', tenant.postal_code)}
+        </div></section>
+        <section><h3>Condições contratuais</h3><div class="pt-contract-profile-grid">
+          <label>Tratamento da caução<select data-contract-field="deposit_mode"><option value="last_months_credit" ${selected(contract.deposit_mode, 'last_months_credit')}>Abater nos últimos aluguéis</option><option value="settlement" ${selected(contract.deposit_mode, 'settlement')}>Acerto ao final</option></select></label>
+          ${contractField('Manifestar renovação até o mês', 'renewal_notice_month', contract.renewal_notice_month || 10, 'number', 'min="1" max="120"')}
+          ${contractField('IPTU mensal separado (R$)', 'iptu_monthly_amount', contract.iptu_monthly_amount, 'number', 'min="0" step="0.01"')}
+          ${contractField('Foro', 'forum', contract.forum, 'text', 'placeholder="Ex.: Goiânia/GO"')}
+          <label class="pt-contract-check"><input data-contract-check="inspection_required" type="checkbox" ${checked(contract.inspection_required !== false)}> Vistoria inicial/final como referência</label>
+          <label class="pt-contract-check"><input data-contract-check="security_system_access" type="checkbox" ${checked(contract.security_system_access)}> Prever aditivo para instalação/manutenção de sistemas de segurança</label>
+        </div>
+        ${templateSpecificFields(contract)}
+        </section>
+        ${mode === 'edit' ? `<div class="pt-profile-current"><b>Modelo atual:</b> ${esc(TEMPLATE_OPTIONS[contract.template]?.label)} · ${lease.tenant_name || 'inquilino'} · versão ${lease.contract_version || 1}. Ao gerar novamente, o pacote recebe nova versão conjunta.</div>` : ''}
+      </div>
+      <footer><button type="button" class="pt-button secondary" data-close>Cancelar</button><button type="button" class="pt-button primary" data-save>${mode === 'edit' ? 'Salvar dados do contrato' : 'Usar estes dados'}</button></footer>
+    </div>`;
 
-    if (mode === 'edit' && detail?.lease?.id) {
-      const button = event.currentTarget; button.disabled = true; button.textContent = 'Salvando…';
-      try {
-        const user = currentUser();
-        const isLandlord = Number(user?.id || 0) === Number(detail.lease.landlord_user_id || 0);
-        if (isLandlord) {
-          const current = detail.lease.metadata || {};
-          await appApi.patch(`/leases/${detail.lease.id}`, { metadata: { ...current, ...payload } });
-        } else {
-          await appApi.patch(`/leases/${detail.lease.id}/tenant/profile`, { tenant_profile: payload.tenant_profile });
+    const close = () => overlay.remove();
+    overlay.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', close));
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); }, { once: true });
+
+    overlay.querySelector('[data-template-selector]')?.addEventListener('change', (event) => {
+      const tenantSnapshot = {};
+      overlay.querySelectorAll('[data-profile-field]').forEach((input) => { tenantSnapshot[input.dataset.profileField] = clean(input.value); });
+      Object.assign(tenant, tenantSnapshot);
+      const currentValues = collectContractValues(overlay, contract);
+      const defaults = defaultContract(event.target.value);
+      contract = normalizeContract({ ...defaults, ...currentValues, template: event.target.value, occupancy_type: defaults.occupancy_type });
+      render();
+    });
+
+    overlay.querySelector('[data-save]')?.addEventListener('click', async (event) => {
+      const tenantProfile = {};
+      overlay.querySelectorAll('[data-profile-field]').forEach((input) => { tenantProfile[input.dataset.profileField] = clean(input.value); });
+      contract = normalizeContract(collectContractValues(overlay, contract));
+      const payload = { tenant_profile: tenantProfile, contract };
+
+      if (mode === 'edit' && detail?.lease?.id) {
+        const button = event.currentTarget; button.disabled = true; button.textContent = 'Salvando…';
+        try {
+          const user = currentUser();
+          const isLandlord = Number(user?.id || 0) === Number(detail.lease.landlord_user_id || 0);
+          if (isLandlord) {
+            const current = detail.lease.metadata || {};
+            await appApi.patch(`/leases/${detail.lease.id}`, { metadata: { ...current, ...payload } });
+          } else {
+            await appApi.patch(`/leases/${detail.lease.id}/tenant/profile`, { tenant_profile: payload.tenant_profile });
+          }
+          close();
+          window.location.reload();
+        } catch (error) {
+          button.disabled = false; button.textContent = 'Salvar dados do contrato';
+          alert(error?.response?.data?.message || 'Não foi possível salvar os dados do contrato.');
         }
+      } else {
+        saveDraft(payload);
+        const trigger = document.querySelector('[data-contract-profile-trigger="new"]');
+        if (trigger) { trigger.dataset.completed = 'true'; trigger.innerHTML = `✓ ${TEMPLATE_OPTIONS[contract.template]?.label || 'Dados do contrato'}`; }
         close();
-        window.location.reload();
-      } catch (error) {
-        button.disabled = false; button.textContent = 'Salvar dados do contrato';
-        alert(error?.response?.data?.message || 'Não foi possível salvar os dados do contrato.');
       }
-    } else {
-      saveDraft(payload);
-      const trigger = document.querySelector('[data-contract-profile-trigger="new"]');
-      if (trigger) { trigger.dataset.completed = 'true'; trigger.innerHTML = '✓ Dados completos do inquilino'; }
-      close();
-    }
-  });
+    });
+  };
+
+  document.body.appendChild(overlay);
+  render();
 }
 
 function enhanceInvitationEntry() {
@@ -181,10 +298,12 @@ function enhanceNewLeaseModal() {
   button.type = 'button';
   button.className = 'pt-contract-profile-trigger';
   button.dataset.contractProfileTrigger = 'new';
-  if (Object.keys(draft()?.tenant_profile || {}).some((key) => draft().tenant_profile[key])) {
-    button.dataset.completed = 'true'; button.innerHTML = '✓ Dados completos do inquilino';
+  const saved = draft();
+  if (Object.keys(saved?.tenant_profile || {}).some((key) => saved.tenant_profile[key])) {
+    button.dataset.completed = 'true';
+    button.innerHTML = `✓ ${TEMPLATE_OPTIONS[saved?.contract?.template]?.label || 'Dados completos do inquilino'}`;
   } else {
-    button.innerHTML = '+ Completar dados do inquilino';
+    button.innerHTML = '+ Escolher modelo e completar contrato';
   }
   button.addEventListener('click', () => openProfileDialog({ mode: 'draft' }));
   tenantSection.appendChild(button);
@@ -193,7 +312,7 @@ function enhanceNewLeaseModal() {
     const hint = document.createElement('small');
     hint.dataset.inviteHint = 'true';
     hint.className = 'pt-contract-flow-hint';
-    hint.textContent = 'Ao criar a locação, a Locaio enviará automaticamente um convite para o e-mail informado.';
+    hint.textContent = 'Escolha residencial, comercial ou suíte compartilhada. Ao criar a locação, a Locaio enviará automaticamente um convite ao e-mail informado.';
     tenantSection.appendChild(hint);
   }
 }
@@ -212,11 +331,12 @@ function enhanceLeaseDetail() {
   }
 
   const packageInfo = latestLeaseDetail?.lease?.metadata?.contract_package;
-  if (packageInfo?.document_count === 3 && !hero.querySelector('[data-package-info]')) {
+  if (packageInfo?.document_count && !hero.querySelector('[data-package-info]')) {
     const badge = document.createElement('div');
     badge.dataset.packageInfo = 'true';
     badge.className = 'pt-contract-package-info';
-    badge.innerHTML = `<b>Pacote contratual</b><span>3 documentos · versão ${packageInfo.version || latestLeaseDetail.lease.contract_version || 1}</span>`;
+    const template = normalizeContract(latestLeaseDetail?.lease?.metadata?.contract || {}).template;
+    badge.innerHTML = `<b>${esc(TEMPLATE_OPTIONS[template]?.label || 'Pacote contratual')}</b><span>${packageInfo.document_count} documento(s) · versão ${packageInfo.version || latestLeaseDetail.lease.contract_version || 1}</span>`;
     hero.appendChild(badge);
   }
 
@@ -281,6 +401,9 @@ export function installContractProfileEnhancements() {
     if (method === 'post' && /\/v1\/apps\/[^/]+\/leases$/.test(url) && config.data && !(config.data instanceof FormData)) {
       const extra = draft();
       config.data = { ...config.data, metadata: { ...(config.data.metadata || {}), ...extra } };
+      const template = extra?.contract?.template;
+      const preset = TEMPLATE_OPTIONS[template];
+      if (preset?.purpose && !config.data.purpose) config.data.purpose = preset.purpose;
     }
     if (method === 'post' && /\/leases\/\d+\/documents$/.test(url) && config.data instanceof FormData) {
       const category = document.querySelector('[data-document-category]')?.value;
