@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FiBriefcase, FiChevronDown, FiHome, FiKey, FiRefreshCw } from 'react-icons/fi';
 import App from '../AppV3.jsx';
+import LeaseTerminationExperience from './LeaseTerminationExperience.jsx';
 import OperationalCommandBar from './OperationalCommandBar.jsx';
 import OperationsExperience from './OperationsExperience.jsx';
 import PortfolioIntelligence from './PortfolioIntelligence.jsx';
@@ -40,6 +41,7 @@ function AccountCenterSession() {
 function OwnerExperience() {
   return <>
     <PropertyWorkspace />
+    <LeaseTerminationExperience />
     <OperationalCommandBar />
     <PortfolioIntelligence />
     <AccountCenterSession />
