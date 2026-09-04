@@ -113,6 +113,23 @@ async function assertGoogleLogin() {
   if (providerErrors.length) throw new Error(`Google rejeitou configuração/origem: ${providerErrors.join(' | ')}`);
 }
 
+async function clickNavigationTargets(prefix) {
+  const labels = await page.$$eval('button', (buttons) => buttons.map((button) => button.textContent?.trim()).filter(Boolean));
+  const expected = ['Visão geral', 'Imóveis', 'Locações'];
+  const missing = expected.filter((label) => !labels.some((text) => text.includes(label)));
+  if (missing.length) throw new Error(`${prefix}: navegação ausente: ${missing.join(', ')}.`);
+
+  for (const target of expected) {
+    await page.evaluate((label) => {
+      const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes(label));
+      button?.click();
+    }, target);
+    await page.waitForFunction((label) => [...document.querySelectorAll('button')]
+      .some((item) => item.textContent?.includes(label) && item.classList.contains('active')), {}, target);
+    await assertHealthy(`${prefix}:${target}`);
+  }
+}
+
 async function assertNavigationIfAuthenticated() {
   if (!E2E_TOKEN) return;
 
@@ -121,20 +138,67 @@ async function assertNavigationIfAuthenticated() {
     if (user) localStorage.setItem('user', user);
   }, { token: E2E_TOKEN, user: E2E_USER });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#root > *', { visible: true });
-  await sleep(1200);
-  await assertHealthy('authenticated');
+  await page.waitForSelector('.pt-app-shell', { visible: true });
+  await assertHealthy('authenticated-live');
+  await clickNavigationTargets('authenticated-live');
+}
 
-  const labels = await page.$$eval('button', (buttons) => buttons.map((button) => button.textContent?.trim()).filter(Boolean));
-  const targets = ['Visão geral', 'Imóveis', 'Locações'].filter((label) => labels.some((text) => text.includes(label)));
-  for (const target of targets) {
-    await page.evaluate((label) => {
-      const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes(label));
-      button?.click();
-    }, target);
-    await sleep(300);
-    await assertHealthy(`navigation:${target}`);
-  }
+async function assertMockAuthenticatedNavigation() {
+  const appOrigin = new URL(BASE_URL).origin;
+  const fakeUser = { id: 9000001, first_name: 'Smoke', name: 'Smoke Test', email: 'smoke@example.invalid' };
+  const jsonHeaders = {
+    'access-control-allow-origin': appOrigin,
+    'access-control-allow-headers': 'Authorization, Content-Type, X-Peter-App, X-Frontend-Page, X-Peter-Context-Role, X-Peter-Ecosystem-SDK',
+    'access-control-allow-methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS',
+    'content-type': 'application/json; charset=utf-8',
+  };
+
+  await page.setRequestInterception(true);
+  page.on('request', async (request) => {
+    if (request.isInterceptResolutionHandled?.()) return;
+    let url;
+    try { url = new URL(request.url()); } catch { await request.continue(); return; }
+    if (url.hostname !== 'api.petertecnet.com.br') {
+      await request.continue();
+      return;
+    }
+
+    if (request.method() === 'OPTIONS') {
+      await request.respond({ status: 204, headers: jsonHeaders, body: '' });
+      return;
+    }
+
+    const path = url.pathname;
+    let payload = {};
+    if (path.endsWith('/leasing/context')) {
+      payload = { contexts: [{ key: 'landlord', label: 'Proprietário' }], default_context: 'landlord' };
+    } else if (path.endsWith('/leasing/context/dashboard')) {
+      payload = { active_leases: 0, properties: 0, pending_amount: 0, overdue_amount: 0, next_charges: [] };
+    } else if (path.endsWith('/properties') || path.endsWith('/leases') || path.endsWith('/applications')) {
+      payload = [];
+    } else if (path.endsWith('/me')) {
+      payload = { user: fakeUser };
+    } else if (path.endsWith('/account/ecosystem')) {
+      payload = { data: { account: fakeUser, applications: [] } };
+    }
+
+    await request.respond({ status: 200, headers: jsonHeaders, body: JSON.stringify(payload) });
+  });
+
+  await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+  await page.evaluate((user) => {
+    localStorage.setItem('token', 'locaio-smoke-token');
+    localStorage.setItem('user', JSON.stringify(user));
+    localStorage.setItem('peter_context_role:locaio', 'landlord');
+  }, fakeUser);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.pt-app-shell', { visible: true });
+  await assertHealthy('authenticated-mock-desktop');
+  await clickNavigationTargets('authenticated-mock');
+
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+  await assertHealthy('authenticated-mock-mobile');
+  console.log('Navegação autenticada simulada concluída sem escrever na API de produção.');
 }
 
 try {
@@ -151,7 +215,8 @@ try {
     await assertHealthy('mobile');
   }
 
-  if (SCOPE === 'authenticated' || SCOPE === 'all') await assertNavigationIfAuthenticated();
+  if ((SCOPE === 'authenticated' || SCOPE === 'all') && E2E_TOKEN) await assertNavigationIfAuthenticated();
+  if (SCOPE === 'public' || SCOPE === 'authenticated' || SCOPE === 'all') await assertMockAuthenticatedNavigation();
 
   if (pageErrors.length) throw new Error(`Erros críticos de JavaScript: ${pageErrors.join(' | ')}`);
   if (criticalRequestFailures.length) throw new Error(`Falhas críticas de rede: ${criticalRequestFailures.join(' | ')}`);
