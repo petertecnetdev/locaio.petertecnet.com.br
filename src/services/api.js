@@ -30,6 +30,34 @@ export function clearAppReadCache() {
   readCache.clear();
 }
 
+export function appMutationPolicy(role, method, path) {
+  const normalizedRole = ['landlord', 'tenant'].includes(role) ? role : null;
+  const normalizedMethod = String(method || '').toLowerCase();
+  const normalizedPath = String(path || '').split('?')[0];
+
+  if (normalizedRole === 'landlord'
+    && normalizedMethod === 'post'
+    && /^\/leases\/\d+\/charges\/\d+\/payment$/.test(normalizedPath)) {
+    return {
+      allowed: false,
+      code: 'LOCAIO_PAYER_ACTION_REQUIRED',
+      message: 'O checkout desta cobrança deve ser iniciado pelo inquilino.',
+    };
+  }
+
+  if (normalizedRole === 'tenant'
+    && ((normalizedMethod === 'post' && /^\/leases\/\d+\/charges\/schedule$/.test(normalizedPath))
+      || (normalizedMethod === 'patch' && /^\/leases\/\d+\/charges\/\d+\/paid$/.test(normalizedPath)))) {
+    return {
+      allowed: false,
+      code: 'LOCAIO_LANDLORD_ACTION_REQUIRED',
+      message: 'Esta ação financeira pertence ao proprietário da locação.',
+    };
+  }
+
+  return { allowed: true, code: null, message: null };
+}
+
 function readKey(path, config) {
   const role = localStorage.getItem(CONTEXT_STORAGE_KEY) || 'none';
   return `${cacheGeneration}|${role}|${path}|${stableSerialize(config?.params || null)}`;
@@ -74,6 +102,15 @@ function cachedAppGet(path, config = {}) {
 }
 
 function mutateApp(method, path, data, config) {
+  const role = localStorage.getItem(CONTEXT_STORAGE_KEY);
+  const policy = appMutationPolicy(role, method, path);
+  if (!policy.allowed) {
+    const error = new Error(policy.message);
+    error.code = policy.code;
+    error.isContextPolicyError = true;
+    return Promise.reject(error);
+  }
+
   const url = `/v1/apps/${APP_SLUG}${path}`;
   const request = method === 'delete'
     ? api.delete(url, config)
