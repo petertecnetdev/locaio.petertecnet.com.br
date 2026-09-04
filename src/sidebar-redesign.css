@@ -1,0 +1,318 @@
+/* Locaio navigation redesign — isolated overrides to keep the main stylesheet stable. */
+
+:root{
+  --sidebar-width: 280px;
+  --sidebar-bg: #07151d;
+  --sidebar-bg-soft: #0b2029;
+  --sidebar-border: rgba(255,255,255,.075);
+  --sidebar-text: #9eb0b7;
+  --sidebar-text-strong: #f4fbf8;
+  --sidebar-accent: #45d6a5;
+  --sidebar-accent-soft: rgba(69,214,165,.12);
+}
+
+@media (min-width: 801px){
+  .sidebar{
+    width:var(--sidebar-width);
+    padding:22px 16px 18px;
+    background:
+      radial-gradient(circle at 15% 5%,rgba(69,214,165,.10),transparent 24%),
+      radial-gradient(circle at 100% 85%,rgba(79,124,255,.08),transparent 28%),
+      linear-gradient(180deg,#06141c 0%,#081a22 52%,#07151d 100%);
+    border-right:1px solid rgba(255,255,255,.035);
+    box-shadow:16px 0 48px rgba(4,19,25,.05);
+  }
+
+  .content{margin-left:var(--sidebar-width)}
+
+  .sidebar .brand{
+    min-height:72px;
+    padding:10px 12px 20px;
+    border-bottom:1px solid var(--sidebar-border);
+    position:relative;
+  }
+
+  .sidebar .brand:after{
+    content:'GESTÃO DE LOCAÇÕES';
+    position:absolute;
+    left:66px;
+    bottom:8px;
+    color:#5f767e;
+    font-size:8px;
+    font-weight:800;
+    letter-spacing:1.15px;
+  }
+
+  .sidebar .brand-logo{
+    width:44px;
+    height:44px;
+    flex-basis:44px;
+    box-shadow:0 10px 28px rgba(35,88,255,.18),0 0 0 1px rgba(255,255,255,.06);
+  }
+
+  .sidebar .brand strong{
+    font-size:21px;
+    letter-spacing:-.65px;
+  }
+
+  .sidebar nav{
+    gap:8px;
+    margin-top:25px;
+    position:relative;
+  }
+
+  .sidebar nav:before{
+    content:'NAVEGAÇÃO';
+    display:block;
+    padding:0 12px 5px;
+    color:#526971;
+    font-size:9px;
+    font-weight:800;
+    letter-spacing:1.25px;
+  }
+
+  .sidebar nav button{
+    position:relative;
+    width:100%;
+    min-height:62px;
+    padding:11px 13px 11px 14px;
+    border:1px solid transparent;
+    border-radius:15px;
+    gap:13px;
+    color:var(--sidebar-text);
+    overflow:hidden;
+    transition:background .18s ease,border-color .18s ease,color .18s ease,transform .18s ease,box-shadow .18s ease;
+  }
+
+  .sidebar nav button:before{
+    content:'';
+    width:4px;
+    height:24px;
+    position:absolute;
+    left:0;
+    top:50%;
+    transform:translateY(-50%) scaleY(.4);
+    border-radius:0 8px 8px 0;
+    background:transparent;
+    transition:.18s ease;
+  }
+
+  .sidebar nav button svg{
+    width:36px;
+    height:36px;
+    padding:9px;
+    flex:0 0 36px;
+    border-radius:11px;
+    background:rgba(255,255,255,.045);
+    color:#8399a1;
+    font-size:18px;
+    transition:.18s ease;
+  }
+
+  .sidebar nav button span{
+    display:block;
+    align-self:flex-start;
+    margin-top:2px;
+    color:inherit;
+    font-size:13px;
+    font-weight:800;
+    line-height:1.15;
+  }
+
+  .sidebar nav button:after{
+    position:absolute;
+    left:63px;
+    top:33px;
+    max-width:175px;
+    color:#5f747c;
+    font-size:9px;
+    font-weight:600;
+    line-height:1.25;
+    white-space:nowrap;
+    transition:.18s ease;
+  }
+
+  .sidebar nav button:nth-child(2):after{content:'Painel e indicadores'}
+  .sidebar nav button:nth-child(3):after{content:'Seu patrimônio cadastrado'}
+  .sidebar nav button:nth-child(4):after{content:'Contratos e recebimentos'}
+
+  .sidebar nav button:hover{
+    color:#e9f4f1;
+    background:rgba(255,255,255,.045);
+    border-color:rgba(255,255,255,.05);
+    transform:translateX(2px);
+  }
+
+  .sidebar nav button:hover svg{
+    color:#cfe0dc;
+    background:rgba(255,255,255,.07);
+  }
+
+  .sidebar nav button.active{
+    color:var(--sidebar-text-strong);
+    background:linear-gradient(90deg,rgba(69,214,165,.145),rgba(69,214,165,.055));
+    border-color:rgba(69,214,165,.14);
+    box-shadow:inset 0 1px rgba(255,255,255,.025),0 8px 24px rgba(0,0,0,.08);
+  }
+
+  .sidebar nav button.active:before{
+    background:var(--sidebar-accent);
+    transform:translateY(-50%) scaleY(1);
+    box-shadow:0 0 16px rgba(69,214,165,.45);
+  }
+
+  .sidebar nav button.active svg{
+    color:#08261d;
+    background:linear-gradient(145deg,#68e1b8,#38c895);
+    box-shadow:0 8px 18px rgba(69,214,165,.16);
+  }
+
+  .sidebar nav button.active:after{color:#83a49a}
+
+  .sidebar nav button:focus-visible,.logout:focus-visible{
+    outline:2px solid rgba(69,214,165,.75);
+    outline-offset:2px;
+  }
+
+  .sidebar-bottom{
+    margin-top:auto;
+    padding:14px 10px 0;
+    border-top:1px solid var(--sidebar-border);
+  }
+
+  .account{
+    margin-bottom:7px;
+    padding:10px;
+    border:1px solid rgba(255,255,255,.055);
+    border-radius:14px;
+    background:rgba(255,255,255,.025);
+  }
+
+  .account>span{
+    width:38px;
+    height:38px;
+    flex:0 0 38px;
+    border-radius:12px;
+    color:var(--sidebar-accent);
+    background:rgba(69,214,165,.10);
+    border:1px solid rgba(69,214,165,.08);
+  }
+
+  .account b{font-size:12px;color:#edf7f4}
+  .account small{max-width:155px;color:#688089;font-size:9px}
+
+  .logout{
+    min-height:42px;
+    padding:10px 12px;
+    border-radius:12px;
+    color:#758b93;
+    transition:.18s ease;
+  }
+
+  .logout:hover{
+    color:#ffd7dc;
+    background:rgba(219,91,102,.08);
+    transform:none;
+  }
+}
+
+@media (max-width: 800px){
+  .mobile-top{
+    height:66px;
+    padding:0 14px;
+    background:rgba(248,251,250,.92);
+    border-bottom:1px solid rgba(17,43,51,.08);
+    box-shadow:0 7px 24px rgba(17,43,51,.055);
+  }
+
+  .mobile-top .brand strong{font-size:18px}
+  .mobile-top .brand small{display:none}
+
+  .mobile-top button{
+    width:39px;
+    height:39px;
+    border-radius:12px;
+    color:#5e727a;
+    background:#eef4f2;
+    border:1px solid #e1e9e6;
+  }
+
+  .content{
+    padding-top:66px;
+    padding-bottom:84px;
+  }
+
+  .mobile-nav{
+    left:10px;
+    right:10px;
+    bottom:10px;
+    height:68px;
+    border:1px solid rgba(17,43,51,.08);
+    border-radius:19px;
+    background:rgba(255,255,255,.94);
+    box-shadow:0 14px 38px rgba(17,43,51,.16);
+    overflow:hidden;
+  }
+
+  .mobile-nav:before{
+    content:'';
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background:linear-gradient(180deg,rgba(255,255,255,.44),transparent 55%);
+  }
+
+  .mobile-nav button{
+    position:relative;
+    gap:5px;
+    color:#7f8f95;
+    transition:color .18s ease,background .18s ease;
+  }
+
+  .mobile-nav button svg{
+    width:27px;
+    height:27px;
+    padding:5px;
+    border-radius:9px;
+    font-size:18px;
+    transition:.18s ease;
+  }
+
+  .mobile-nav button span{
+    font-size:9px;
+    letter-spacing:.15px;
+  }
+
+  .mobile-nav button.active{
+    color:#147b5f;
+    background:linear-gradient(180deg,rgba(69,214,165,.09),rgba(69,214,165,.025));
+  }
+
+  .mobile-nav button.active svg{
+    color:#0e7356;
+    background:rgba(69,214,165,.14);
+  }
+
+  .mobile-nav button.active:after{
+    content:'';
+    position:absolute;
+    left:50%;
+    bottom:2px;
+    width:24px;
+    height:3px;
+    border-radius:3px;
+    background:#34bd90;
+    transform:translateX(-50%);
+  }
+
+  .toast{bottom:92px}
+}
+
+@media (max-width: 390px){
+  .mobile-nav{left:7px;right:7px;bottom:7px;height:64px;border-radius:17px}
+  .mobile-nav button span{font-size:8px}
+}
+
+@media (prefers-reduced-motion: reduce){
+  .sidebar nav button,.sidebar nav button:before,.sidebar nav button svg,.logout,.mobile-nav button,.mobile-nav button svg{transition:none!important}
+}
