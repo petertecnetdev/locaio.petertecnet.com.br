@@ -19,4 +19,8 @@ jobs:
           cache: npm
           cache-dependency-path: package.json
       - run: npm install --no-audit --no-fund
+      - name: Validate frontend architecture
+        run: node scripts/architecture-guard.mjs
+      - name: Validate production smoke syntax
+        run: node --check scripts/production-smoke.mjs
       - run: npm run build
