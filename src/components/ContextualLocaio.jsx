@@ -9,12 +9,40 @@ import UserAccountCenter from './UserAccountCenter.jsx';
 import TenantPortal from './TenantPortal.jsx';
 import { appApi, errorMessage, getContextRole, setContextRole } from '../services/api.js';
 
+function AccountCenterSession() {
+  const readSession = () => (localStorage.getItem('token') ? 'authenticated' : 'guest');
+  const [sessionState, setSessionState] = useState(readSession);
+
+  useEffect(() => {
+    let frame = 0;
+    const sync = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setSessionState(readSession()));
+    };
+
+    window.addEventListener('authChanged', sync);
+    window.addEventListener('storage', sync);
+
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('authChanged', sync);
+      window.removeEventListener('storage', sync);
+      observer.disconnect();
+    };
+  }, []);
+
+  return <UserAccountCenter key={sessionState} />;
+}
+
 function OwnerExperience() {
   return <>
     <PropertyWorkspace />
     <OperationalCommandBar />
     <PortfolioIntelligence />
-    <UserAccountCenter />
+    <AccountCenterSession />
     <OperationsExperience>
       <App />
     </OperationsExperience>
@@ -79,7 +107,11 @@ export default function ContextualLocaio() {
     loadContext();
     const authChanged = () => loadContext();
     window.addEventListener('authChanged', authChanged);
-    return () => window.removeEventListener('authChanged', authChanged);
+    window.addEventListener('storage', authChanged);
+    return () => {
+      window.removeEventListener('authChanged', authChanged);
+      window.removeEventListener('storage', authChanged);
+    };
   }, [loadContext]);
 
   const activeContext = useMemo(
@@ -104,6 +136,6 @@ export default function ContextualLocaio() {
   return <div className={`locaio-context-root context-${role}`}>
     <ContextSwitcher contexts={contexts} role={role} onChange={changeRole} />
     {error && <div className="locaio-context-warning"><FiHome /><span>{error}</span></div>}
-    {role === 'tenant' && activeContext ? <><UserAccountCenter /><TenantPortal key={`tenant-${role}`} /></> : <OwnerExperience key={`owner-${role}`} />}
+    {role === 'tenant' && activeContext ? <><AccountCenterSession /><TenantPortal key={`tenant-${role}`} /></> : <OwnerExperience key={`owner-${role}`} />}
   </div>;
 }
