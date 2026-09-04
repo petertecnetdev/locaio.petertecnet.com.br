@@ -2,10 +2,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './AppV3.jsx';
 import PublicSignaturePage from './PublicSignaturePage.jsx';
+import SharedAssetPage from './SharedAssetPage.jsx';
 import OperationalCommandBar from './components/OperationalCommandBar.jsx';
 import OperationsExperience from './components/OperationsExperience.jsx';
 import PortfolioIntelligence from './components/PortfolioIntelligence.jsx';
-import PropertyWorkspace from './components/PropertyWorkspace.jsx';
+import PropertyWorkspaceV2 from './components/PropertyWorkspaceV2.jsx';
 import PeterAccountGateway from './components/PeterAccountGateway.jsx';
 import { API_BASE_URL, APP_SLUG } from './services/api.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
@@ -25,6 +26,8 @@ import './contract-profile-enhancements.css';
 import './lease-onboarding-enhancements.css';
 import './property-management-enhancements.css';
 import './property-workspace.css';
+import './property-intelligence.css';
+import './shared-asset.css';
 import './operations-experience.css';
 import './portfolio-intelligence.css';
 import './operational-command-bar.css';
@@ -40,15 +43,18 @@ installPropertyManagementEnhancements();
 installPropertyWorkspaceBridge();
 
 const signatureMatch = window.location.pathname.match(/^\/sign\/([A-Za-z0-9]{40,128})\/?$/);
+const shareMatch = window.location.pathname.match(/^\/share\/([A-Za-z0-9]{32,128})\/?$/);
 const root = createRoot(document.getElementById('root'));
 
 root.render(
   <StrictMode>
     {signatureMatch ? (
       <PublicSignaturePage token={signatureMatch[1]} />
+    ) : shareMatch ? (
+      <SharedAssetPage token={shareMatch[1]} />
     ) : (
       <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
-        <PropertyWorkspace />
+        <PropertyWorkspaceV2 />
         <OperationalCommandBar />
         <PortfolioIntelligence />
         <OperationsExperience>
