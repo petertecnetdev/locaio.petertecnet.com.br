@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './AppV2.jsx';
+import App from './AppV3.jsx';
+import PublicSignaturePage from './PublicSignaturePage.jsx';
 import OperationalCommandBar from './components/OperationalCommandBar.jsx';
 import OperationsExperience from './components/OperationsExperience.jsx';
 import PortfolioIntelligence from './components/PortfolioIntelligence.jsx';
@@ -24,6 +25,8 @@ import './property-management-enhancements.css';
 import './operations-experience.css';
 import './portfolio-intelligence.css';
 import './operational-command-bar.css';
+import './contract-workflow.css';
+import './public-signature.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
@@ -32,14 +35,21 @@ installContractProfileEnhancements();
 installLeaseOnboardingEnhancements();
 installPropertyManagementEnhancements();
 
-createRoot(document.getElementById('root')).render(
+const signatureMatch = window.location.pathname.match(/^\/sign\/([A-Za-z0-9]{40,128})\/?$/);
+const root = createRoot(document.getElementById('root'));
+
+root.render(
   <StrictMode>
-    <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
-      <OperationalCommandBar />
-      <PortfolioIntelligence />
-      <OperationsExperience>
-        <App />
-      </OperationsExperience>
-    </PeterAccountGateway>
+    {signatureMatch ? (
+      <PublicSignaturePage token={signatureMatch[1]} />
+    ) : (
+      <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
+        <OperationalCommandBar />
+        <PortfolioIntelligence />
+        <OperationsExperience>
+          <App />
+        </OperationsExperience>
+      </PeterAccountGateway>
+    )}
   </StrictMode>,
 );
