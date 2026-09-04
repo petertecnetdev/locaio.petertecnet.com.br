@@ -2,14 +2,17 @@
 import { useEffect, useRef } from 'react';
 
 const SDK_VERSION = '3.0.0';
+const TELEMETRY_VERSION = '3.1.0';
 const INSIGHTS_VERSION = '1.0.0';
 const SDK_URL = `https://petertecnet.com.br/ecosystem/peter-ecosystem-v3.js?v=${SDK_VERSION}`;
+const TELEMETRY_URL = `https://petertecnet.com.br/ecosystem/peter-telemetry-v3.js?v=${TELEMETRY_VERSION}`;
 const INSIGHTS_URL = `https://petertecnet.com.br/ecosystem/peter-insights.js?v=${INSIGHTS_VERSION}`;
 const SCRIPT_LOAD_TIMEOUT_MS = 12000;
 let sdkPromise;
+let telemetryPromise;
 let insightsPromise;
 
-function loadScript({ selector, src, datasetKey, datasetValue, isReady, errorMessage }) {
+function loadScript({ selector, src, datasetKey, datasetValue, isReady, errorMessage, attributes = {} }) {
   if (isReady()) return Promise.resolve();
 
   const waitForScript = (script) => new Promise((resolve, reject) => {
@@ -57,10 +60,34 @@ function loadScript({ selector, src, datasetKey, datasetValue, isReady, errorMes
   script.src = src;
   script.async = true;
   script.dataset[datasetKey] = datasetValue;
+  Object.entries(attributes).forEach(([key, value]) => { script.dataset[key] = value || ''; });
   script.dataset.peterLoadState = 'loading';
   const pending = waitForScript(script);
   document.head.appendChild(script);
   return pending;
+}
+
+function loadTelemetry(apiBaseUrl, appSlug) {
+  if (window.PeterTecnetTelemetry?.version === TELEMETRY_VERSION) {
+    window.PeterTecnetTelemetry.start({ apiBaseUrl, appSlug });
+    return Promise.resolve();
+  }
+  if (!telemetryPromise) {
+    telemetryPromise = loadScript({
+      selector: 'script[data-peter-telemetry-sdk]',
+      src: TELEMETRY_URL,
+      datasetKey: 'peterTelemetrySdk',
+      datasetValue: TELEMETRY_VERSION,
+      attributes: { appSlug, apiBase: apiBaseUrl },
+      isReady: () => window.PeterTecnetTelemetry?.version === TELEMETRY_VERSION,
+      errorMessage: 'Não foi possível carregar a telemetria Peter Tecnet.',
+    }).then(() => window.PeterTecnetTelemetry?.start({ apiBaseUrl, appSlug }))
+      .catch((error) => {
+        telemetryPromise = undefined;
+        throw error;
+      });
+  }
+  return telemetryPromise;
 }
 
 function loadSdk() {
@@ -94,23 +121,24 @@ export default function PeterAccountGateway({ apiBaseUrl, appSlug, children }) {
     let idleId = null;
     let fallbackTimer = null;
     const host = hostRef.current;
+    const api = apiBaseUrl || 'https://api.petertecnet.com.br/api';
 
-    loadSdk().then(() => {
-      if (!active || !host) return;
-      const launcher = document.createElement('peter-ecosystem-launcher');
-      launcher.setAttribute('api-base', apiBaseUrl || 'https://api.petertecnet.com.br/api');
-      launcher.setAttribute('app-slug', appSlug || '');
-      launcher.setAttribute('sdk-version', SDK_VERSION);
-      host.replaceChildren(launcher);
-    }).catch((error) => console.error('[Peter Tecnet Ecosystem]', error));
+    loadTelemetry(api, appSlug || '')
+      .catch((error) => console.error('[Peter Tecnet Telemetry]', error))
+      .finally(() => loadSdk().then(() => {
+        if (!active || !host) return;
+        const launcher = document.createElement('peter-ecosystem-launcher');
+        launcher.setAttribute('api-base', api);
+        launcher.setAttribute('app-slug', appSlug || '');
+        launcher.setAttribute('sdk-version', SDK_VERSION);
+        host.replaceChildren(launcher);
+      }).catch((error) => console.error('[Peter Tecnet Ecosystem]', error)));
 
     const loadOptionalInsights = () => {
       if (!active) return;
       loadInsights().catch((error) => console.error('[Peter Tecnet Insights]', error));
     };
 
-    // Gráficos são opcionais no caminho crítico. O SDK de insights entra quando
-    // o navegador estiver ocioso, sem competir com autenticação, paint ou dashboard.
     if (typeof window.requestIdleCallback === 'function') {
       idleId = window.requestIdleCallback(loadOptionalInsights, { timeout: 3500 });
     } else {
