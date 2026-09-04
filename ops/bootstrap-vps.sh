@@ -121,6 +121,17 @@ server {
     index index.html;
     client_max_body_size 20M;
 
+    # Compressão do payload textual reduz o tempo de transferência do bundle,
+    # especialmente em conexões móveis. PNG/JPEG/WebP já são comprimidos e não
+    # entram na lista para evitar CPU desperdiçada.
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/xml application/json application/javascript application/xml application/xml+rss image/svg+xml;
+    etag on;
+
     location / {
         try_files \$uri \$uri/ /index.html;
     }
