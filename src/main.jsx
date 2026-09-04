@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './AppV3.jsx';
 import PublicSignaturePage from './PublicSignaturePage.jsx';
@@ -41,6 +41,34 @@ installLeaseOnboardingEnhancements();
 installPropertyManagementEnhancements();
 installPropertyWorkspaceBridge();
 
+function AccountCenterSession() {
+  const readSession = () => (localStorage.getItem('token') ? 'authenticated' : 'guest');
+  const [sessionState, setSessionState] = useState(readSession);
+
+  useEffect(() => {
+    let frame = 0;
+    const sync = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setSessionState(readSession()));
+    };
+
+    window.addEventListener('authChanged', sync);
+    window.addEventListener('storage', sync);
+
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('authChanged', sync);
+      window.removeEventListener('storage', sync);
+      observer.disconnect();
+    };
+  }, []);
+
+  return <UserAccountCenter key={sessionState} />;
+}
+
 const signatureMatch = window.location.pathname.match(/^\/sign\/([A-Za-z0-9]{40,128})\/?$/);
 const root = createRoot(document.getElementById('root'));
 
@@ -53,7 +81,7 @@ root.render(
         <PropertyWorkspace />
         <OperationalCommandBar />
         <PortfolioIntelligence />
-        <UserAccountCenter />
+        <AccountCenterSession />
         <OperationsExperience>
           <App />
         </OperationsExperience>
