@@ -1,0 +1,14 @@
+/*
+ * Payment actions are contextual in Locaio.
+ * Owners manage receivables and confirm settlement; payment checkout belongs
+ * to the tenant context. Keeping the guard at the context boundary prevents
+ * the landlord UI from exposing actions the API intentionally rejects (PIX)
+ * or that should be initiated by the payer (provider checkout).
+ */
+.context-landlord .pt-charge-actions > button:not(.received) {
+  display: none !important;
+}
+
+.context-landlord .pt-charge-actions > .received {
+  display: inline-flex;
+}
