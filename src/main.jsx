@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './AppV2.jsx';
 import PeterAccountGateway from './components/PeterAccountGateway.jsx';
+import LeasingLifecycleCenter from './components/LeasingLifecycleCenter.jsx';
 import { API_BASE_URL, APP_SLUG } from './services/api.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installProductionGuards } from './productionGuards.js';
@@ -14,6 +15,7 @@ import './visual-enhancements.css';
 import './dashboard-overview.css';
 import './design-system-v2.css';
 import './contract-profile-enhancements.css';
+import './leasing-lifecycle-center.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
@@ -24,6 +26,7 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
       <App />
+      <LeasingLifecycleCenter />
     </PeterAccountGateway>
   </StrictMode>,
 );
