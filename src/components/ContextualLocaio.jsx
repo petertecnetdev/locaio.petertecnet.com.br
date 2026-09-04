@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useMemo, useState } from 'react';
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FiBriefcase, FiChevronDown, FiHome, FiKey, FiRefreshCw } from 'react-icons/fi';
 import App from '../AppV3.jsx';
 import '../lease-termination.css';
@@ -104,8 +104,10 @@ export default function ContextualLocaio() {
   const [role, setRole] = useState(getContextRole() || 'landlord');
   const [loading, setLoading] = useState(hasToken);
   const [error, setError] = useState('');
+  const contextRequestRef = useRef(0);
 
   const loadContext = useCallback(async () => {
+    const requestId = ++contextRequestRef.current;
     const authenticated = Boolean(localStorage.getItem('token'));
     setHasToken(authenticated);
     if (!authenticated) {
@@ -119,6 +121,7 @@ export default function ContextualLocaio() {
     setLoading(true); setError('');
     try {
       const { data } = await appApi.get('/leasing/context');
+      if (requestId !== contextRequestRef.current) return;
       const available = Array.isArray(data?.contexts) ? data.contexts : [];
       const stored = getContextRole();
       const resolved = available.some((context) => context.key === stored)
@@ -128,13 +131,14 @@ export default function ContextualLocaio() {
       setRole(resolved);
       setContextRole(resolved);
     } catch (requestError) {
+      if (requestId !== contextRequestRef.current) return;
       setError(errorMessage(requestError, 'Não foi possível identificar seu contexto na Locaio.'));
       // Mantém o fluxo anterior disponível caso uma implantação parcial deixe a
       // API contextual temporariamente indisponível.
       setRole('landlord');
       setContextRole('landlord');
     } finally {
-      setLoading(false);
+      if (requestId === contextRequestRef.current) setLoading(false);
     }
   }, []);
 
