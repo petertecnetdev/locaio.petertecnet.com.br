@@ -1,9 +1,9 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useRef } from 'react';
 
-const SDK_VERSION = '2.0.0';
+const SDK_VERSION = '3.0.0';
 const INSIGHTS_VERSION = '1.0.0';
-const SDK_URL = `https://petertecnet.com.br/ecosystem/peter-ecosystem.js?v=${SDK_VERSION}`;
+const SDK_URL = `https://petertecnet.com.br/ecosystem/peter-ecosystem-v3.js?v=${SDK_VERSION}`;
 const INSIGHTS_URL = `https://petertecnet.com.br/ecosystem/peter-insights.js?v=${INSIGHTS_VERSION}`;
 const SCRIPT_LOAD_TIMEOUT_MS = 12000;
 let sdkPromise;
@@ -93,9 +93,6 @@ export default function PeterAccountGateway({ apiBaseUrl, appSlug, children }) {
     let active = true;
     const host = hostRef.current;
 
-    // O launcher de conta é infraestrutura essencial do ecossistema e não deve
-    // depender do SDK opcional de insights. Assim, indisponibilidade de gráficos
-    // não bloqueia autenticação, troca de conta ou acesso ao ecossistema.
     loadSdk().then(() => {
       if (!active || !host) return;
       const launcher = document.createElement('peter-ecosystem-launcher');
@@ -105,9 +102,6 @@ export default function PeterAccountGateway({ apiBaseUrl, appSlug, children }) {
       host.replaceChildren(launcher);
     }).catch((error) => console.error('[Peter Tecnet Ecosystem]', error));
 
-    // Insights enriquece a experiência, mas sua falha não pode degradar o fluxo
-    // principal. Componentes que dependam dele continuam responsáveis por seus
-    // próprios estados de fallback.
     loadInsights().catch((error) => console.error('[Peter Tecnet Insights]', error));
 
     return () => { active = false; host?.replaceChildren(); };
