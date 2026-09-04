@@ -47,4 +47,8 @@ jobs:
             echo 'LOCAIO_E2E_TOKEN não configurado: executando smoke público, responsivo e de console.'
           fi
 
-          BROWSER="$BROWSER" SMOKE_SCOPE="$SCOPE" node scripts/production-smoke.mjs
+          BROWSER="$BROWSER" SMOKE_SCOPE="$SCOPE" node scripts/production-smoke.mjs 2>&1 | tee /tmp/locaio-production-smoke.log
+          if grep -Fq 'google.accounts.id.initialize() is called multiple times' /tmp/locaio-production-smoke.log; then
+            echo 'Google Identity Services foi inicializado mais de uma vez.' >&2
+            exit 1
+          fi
