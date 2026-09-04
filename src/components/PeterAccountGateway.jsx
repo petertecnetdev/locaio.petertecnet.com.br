@@ -91,6 +91,8 @@ export default function PeterAccountGateway({ apiBaseUrl, appSlug, children }) {
   const hostRef = useRef(null);
   useEffect(() => {
     let active = true;
+    let idleId = null;
+    let fallbackTimer = null;
     const host = hostRef.current;
 
     loadSdk().then(() => {
@@ -102,9 +104,25 @@ export default function PeterAccountGateway({ apiBaseUrl, appSlug, children }) {
       host.replaceChildren(launcher);
     }).catch((error) => console.error('[Peter Tecnet Ecosystem]', error));
 
-    loadInsights().catch((error) => console.error('[Peter Tecnet Insights]', error));
+    const loadOptionalInsights = () => {
+      if (!active) return;
+      loadInsights().catch((error) => console.error('[Peter Tecnet Insights]', error));
+    };
 
-    return () => { active = false; host?.replaceChildren(); };
+    // Gráficos são opcionais no caminho crítico. O SDK de insights entra quando
+    // o navegador estiver ocioso, sem competir com autenticação, paint ou dashboard.
+    if (typeof window.requestIdleCallback === 'function') {
+      idleId = window.requestIdleCallback(loadOptionalInsights, { timeout: 3500 });
+    } else {
+      fallbackTimer = window.setTimeout(loadOptionalInsights, 1800);
+    }
+
+    return () => {
+      active = false;
+      if (idleId !== null) window.cancelIdleCallback?.(idleId);
+      if (fallbackTimer !== null) window.clearTimeout(fallbackTimer);
+      host?.replaceChildren();
+    };
   }, [apiBaseUrl, appSlug]);
   return <>{children}<span ref={hostRef} style={{ display: 'contents' }} /></>;
 }
