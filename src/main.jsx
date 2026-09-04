@@ -9,6 +9,7 @@ import './styles.css';
 import './auth-enhancements.css';
 import './brand.css';
 import './sidebar-redesign.css';
+import './navigationEnhancements.js';
 
 installAuthenticatedDownloads();
 installProductionGuards();
