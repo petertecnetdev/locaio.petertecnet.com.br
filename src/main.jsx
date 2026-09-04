@@ -6,6 +6,7 @@ import OperationalCommandBar from './components/OperationalCommandBar.jsx';
 import OperationsExperience from './components/OperationsExperience.jsx';
 import PortfolioIntelligence from './components/PortfolioIntelligence.jsx';
 import PeterAccountGateway from './components/PeterAccountGateway.jsx';
+import UserAccountCenter from './components/UserAccountCenter.jsx';
 import { API_BASE_URL, APP_SLUG } from './services/api.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installProductionGuards } from './productionGuards.js';
@@ -27,6 +28,7 @@ import './portfolio-intelligence.css';
 import './operational-command-bar.css';
 import './contract-workflow.css';
 import './public-signature.css';
+import './account-center.css';
 
 installAuthenticatedDownloads();
 installProductionGuards();
@@ -46,6 +48,7 @@ root.render(
       <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
         <OperationalCommandBar />
         <PortfolioIntelligence />
+        <UserAccountCenter />
         <OperationsExperience>
           <App />
         </OperationsExperience>
