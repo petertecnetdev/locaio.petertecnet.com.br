@@ -45,13 +45,13 @@ const root = createRoot(document.getElementById('root'));
 root.render(
   <StrictMode>
     <AppRecoveryBoundary>
-      {signatureMatch ? (
-        <PublicSignaturePage token={signatureMatch[1]} />
-      ) : (
-        <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
+      <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
+        {signatureMatch ? (
+          <PublicSignaturePage token={signatureMatch[1]} />
+        ) : (
           <ContextualLocaio />
-        </PeterAccountGateway>
-      )}
+        )}
+      </PeterAccountGateway>
     </AppRecoveryBoundary>
   </StrictMode>,
 );
