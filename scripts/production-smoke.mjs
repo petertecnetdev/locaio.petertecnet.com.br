@@ -64,6 +64,13 @@ async function navigate() {
 }
 
 async function assertHealthy(label) {
+  // Aguarda o CSS responsivo e observers concluirem o ciclo de layout apos resize/navegacao.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.waitForFunction(
+    () => document.documentElement.scrollWidth <= window.innerWidth + 24,
+    { timeout: 1500, polling: 50 },
+  ).catch(() => {});
+
   const state = await page.evaluate(() => ({
     rootTextLength: (document.querySelector('#root')?.innerText || '').trim().length,
     recoveryVisible: Boolean(document.querySelector('.locaio-recovery')),
