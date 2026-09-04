@@ -23,7 +23,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Install browser smoke dependency
         run: npm install --no-save --package-lock=false puppeteer-core@latest
