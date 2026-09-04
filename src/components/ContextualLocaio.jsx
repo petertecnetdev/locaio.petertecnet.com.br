@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Component, useCallback, useEffect, useMemo, useState } from 'react';
 import { FiBriefcase, FiChevronDown, FiHome, FiKey, FiRefreshCw } from 'react-icons/fi';
 import App from '../AppV3.jsx';
 import '../lease-termination.css';
@@ -11,6 +11,26 @@ import PropertyWorkspace from './PropertyWorkspace.jsx';
 import UserAccountCenter from './UserAccountCenter.jsx';
 import TenantPortal from './TenantPortal.jsx';
 import { appApi, errorMessage, getContextRole, setContextRole } from '../services/api.js';
+
+class FeatureBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { failed: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error, info) {
+    console.error(`[Locaio] Falha isolada em ${this.props.name || 'experiência complementar'}.`, error, info);
+  }
+
+  render() {
+    if (this.state.failed) return this.props.fallback || null;
+    return this.props.children;
+  }
+}
 
 function AccountCenterSession() {
   const readSession = () => (localStorage.getItem('token') ? 'authenticated' : 'guest');
@@ -42,15 +62,17 @@ function AccountCenterSession() {
 
 function OwnerExperience() {
   return <>
-    <PropertyWorkspace />
-    <LeaseTerminationExperience />
-    <OperationalCommandBar />
-    <PortfolioIntelligence />
-    <PaymentReceivingCenter />
-    <AccountCenterSession />
-    <OperationsExperience>
-      <App />
-    </OperationsExperience>
+    <FeatureBoundary name="workspace do imóvel"><PropertyWorkspace /></FeatureBoundary>
+    <FeatureBoundary name="distrato"><LeaseTerminationExperience /></FeatureBoundary>
+    <FeatureBoundary name="barra operacional"><OperationalCommandBar /></FeatureBoundary>
+    <FeatureBoundary name="inteligência de portfólio"><PortfolioIntelligence /></FeatureBoundary>
+    <FeatureBoundary name="recebimentos"><PaymentReceivingCenter /></FeatureBoundary>
+    <FeatureBoundary name="central da conta"><AccountCenterSession /></FeatureBoundary>
+    <FeatureBoundary name="central de operação" fallback={<App />}>
+      <OperationsExperience>
+        <App />
+      </OperationsExperience>
+    </FeatureBoundary>
   </>;
 }
 
@@ -141,6 +163,9 @@ export default function ContextualLocaio() {
   return <div className={`locaio-context-root context-${role}`}>
     <ContextSwitcher contexts={contexts} role={role} onChange={changeRole} />
     {error && <div className="locaio-context-warning"><FiHome /><span>{error}</span></div>}
-    {role === 'tenant' && activeContext ? <><AccountCenterSession /><TenantPortal key={`tenant-${role}`} /></> : <OwnerExperience key={`owner-${role}`} />}
+    {role === 'tenant' && activeContext ? <>
+      <FeatureBoundary name="central da conta"><AccountCenterSession /></FeatureBoundary>
+      <FeatureBoundary name="portal do inquilino"><TenantPortal key={`tenant-${role}`} /></FeatureBoundary>
+    </> : <OwnerExperience key={`owner-${role}`} />}
   </div>;
 }
