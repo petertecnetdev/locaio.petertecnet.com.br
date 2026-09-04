@@ -1,0 +1,51 @@
+name: Production Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 10 * * *'
+  workflow_run:
+    workflows: ['Deploy VPS']
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install browser smoke dependency
+        run: npm install --no-save --package-lock=false puppeteer-core@latest
+
+      - name: Validate production desktop, mobile, console and navigation
+        shell: bash
+        env:
+          LOCAIO_E2E_TOKEN: ${{ secrets.LOCAIO_E2E_TOKEN }}
+          LOCAIO_E2E_USER: ${{ secrets.LOCAIO_E2E_USER }}
+        run: |
+          set -euo pipefail
+          BROWSER="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          test -n "$BROWSER" || { echo 'Chrome/Chromium não encontrado.' >&2; exit 1; }
+
+          SCOPE=public
+          if [ -n "${LOCAIO_E2E_TOKEN:-}" ]; then
+            SCOPE=all
+            echo 'Token E2E configurado: smoke autenticado e navegação serão executados.'
+          else
+            echo 'LOCAIO_E2E_TOKEN não configurado: executando smoke público, responsivo e de console.'
+          fi
+
+          BROWSER="$BROWSER" SMOKE_SCOPE="$SCOPE" node scripts/production-smoke.mjs
