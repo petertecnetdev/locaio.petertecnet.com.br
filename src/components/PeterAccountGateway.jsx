@@ -46,7 +46,11 @@ export default function PeterAccountGateway({ apiBaseUrl, appSlug, children }) {
   useEffect(() => {
     let active = true;
     const host = hostRef.current;
-    Promise.all([loadSdk(), loadInsights()]).then(() => {
+
+    // O launcher de conta é infraestrutura essencial do ecossistema e não deve
+    // depender do SDK opcional de insights. Assim, indisponibilidade de gráficos
+    // não bloqueia autenticação, troca de conta ou acesso ao ecossistema.
+    loadSdk().then(() => {
       if (!active || !host) return;
       const launcher = document.createElement('peter-ecosystem-launcher');
       launcher.setAttribute('api-base', apiBaseUrl || 'https://api.petertecnet.com.br/api');
@@ -54,6 +58,12 @@ export default function PeterAccountGateway({ apiBaseUrl, appSlug, children }) {
       launcher.setAttribute('sdk-version', SDK_VERSION);
       host.replaceChildren(launcher);
     }).catch((error) => console.error('[Peter Tecnet Ecosystem]', error));
+
+    // Insights enriquece a experiência, mas sua falha não pode degradar o fluxo
+    // principal. Componentes que dependam dele continuam responsáveis por seus
+    // próprios estados de fallback.
+    loadInsights().catch((error) => console.error('[Peter Tecnet Insights]', error));
+
     return () => { active = false; host?.replaceChildren(); };
   }, [apiBaseUrl, appSlug]);
   return <>{children}<span ref={hostRef} style={{ display: 'contents' }} /></>;
