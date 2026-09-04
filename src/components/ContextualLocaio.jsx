@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FiBriefcase, FiChevronDown, FiHome, FiKey, FiRefreshCw } from 'react-icons/fi';
 import App from '../AppV3.jsx';
+import '../lease-termination.css';
 import LeaseTerminationExperience from './LeaseTerminationExperience.jsx';
 import OperationalCommandBar from './OperationalCommandBar.jsx';
 import OperationsExperience from './OperationsExperience.jsx';
