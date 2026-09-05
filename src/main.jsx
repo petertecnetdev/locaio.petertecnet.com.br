@@ -9,6 +9,7 @@ import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installGoogleIdentityGuard } from './services/googleIdentityGuard.js';
 import { installChunkRecoveryGuard, recoverFromChunkLoadError } from './services/chunkRecovery.js';
 import { installProductionGuards } from './productionGuards.js';
+import { installPeterWhatsappFallback } from './utils/peterWhatsappFallback.js';
 import './styles.css';
 import './auth-enhancements.css';
 import './brand.css';
@@ -34,6 +35,7 @@ installChunkRecoveryGuard();
 installAuthenticatedDownloads();
 installProductionGuards();
 installGoogleIdentityGuard();
+installPeterWhatsappFallback();
 
 const signatureMatch = window.location.pathname.match(/^\/sign\/([A-Za-z0-9]{40,128})\/?$/);
 const root = createRoot(document.getElementById('root'));
