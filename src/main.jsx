@@ -28,6 +28,7 @@ import './public-signature.css';
 import './account-center.css';
 import './contextual-locaio.css';
 import './app-recovery.css';
+import './nexus-mobile-nav.css';
 
 installChunkRecoveryGuard();
 installAuthenticatedDownloads();
