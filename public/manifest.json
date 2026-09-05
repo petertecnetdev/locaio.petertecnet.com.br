@@ -12,5 +12,13 @@
   "icons": [
     {"src":"/logo-locaio.png","sizes":"192x192","type":"image/png","purpose":"any"},
     {"src":"/logo-locaio.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ],
+  "prefer_related_applications": false,
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://locaio.petertecnet.com.br/manifest.json",
+      "id": "/"
+    }
   ]
 }
