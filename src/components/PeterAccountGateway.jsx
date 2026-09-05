@@ -80,7 +80,7 @@ function loadInsights() {
 }
 
 function dockLauncherInNavbar(launcher) {
-  const selectors = ['[data-peter-ecosystem-slot]', '.navbar .container', '.navbar .container-fluid', '.navbar', 'header nav', "nav[role='navigation']", 'nav'];
+  const selectors = ['[data-peter-ecosystem-slot]', '.cut-navbar__inner', '.navlog__navbar .container', '.globalnav__header .navbar', '.navbar .container', '.navbar .container-fluid', '.navbar', 'header nav', "nav[role='navigation']", 'nav'];
   const findTarget = () => selectors.map((selector) => document.querySelector(selector)).find(Boolean) || null;
   const applyDockedLayout = () => {
     if (!launcher?.isConnected || !launcher.shadowRoot) return;
@@ -102,12 +102,27 @@ function dockLauncherInNavbar(launcher) {
     applyDockedLayout();
     return true;
   };
+  let frame = 0;
+  const scheduleMount = () => {
+    if (frame) return;
+    frame = window.requestAnimationFrame(() => {
+      frame = 0;
+      mount();
+      applyDockedLayout();
+    });
+  };
   mount();
   const shadowObserver = new MutationObserver(applyDockedLayout);
   if (launcher.shadowRoot) shadowObserver.observe(launcher.shadowRoot, { childList: true, subtree: true });
-  const navObserver = new MutationObserver(() => { if (mount()) navObserver.disconnect(); });
-  if (launcher.getAttribute('data-peter-navbar-docked') !== 'true') navObserver.observe(document.body, { childList: true, subtree: true });
-  return () => { shadowObserver.disconnect(); navObserver.disconnect(); };
+  const navObserver = new MutationObserver(scheduleMount);
+  navObserver.observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('resize', scheduleMount, { passive: true });
+  return () => {
+    shadowObserver.disconnect();
+    navObserver.disconnect();
+    window.removeEventListener('resize', scheduleMount);
+    if (frame) window.cancelAnimationFrame(frame);
+  };
 }
 
 export default function PeterAccountGateway({ apiBaseUrl, appSlug, children }) {
