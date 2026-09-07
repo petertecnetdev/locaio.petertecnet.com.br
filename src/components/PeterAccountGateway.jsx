@@ -103,6 +103,7 @@ function dockLauncherInNavbar(launcher) {
     return true;
   };
   let frame = 0;
+  const retryTimers = new Set();
   const scheduleMount = () => {
     if (frame) return;
     frame = window.requestAnimationFrame(() => {
@@ -111,16 +112,24 @@ function dockLauncherInNavbar(launcher) {
       applyDockedLayout();
     });
   };
+  const scheduleRetry = (delay) => {
+    const timer = window.setTimeout(() => {
+      retryTimers.delete(timer);
+      scheduleMount();
+    }, delay);
+    retryTimers.add(timer);
+  };
+
   mount();
-  const shadowObserver = new MutationObserver(applyDockedLayout);
-  if (launcher.shadowRoot) shadowObserver.observe(launcher.shadowRoot, { childList: true, subtree: true });
-  const navObserver = new MutationObserver(scheduleMount);
-  navObserver.observe(document.body, { childList: true, subtree: true });
+  applyDockedLayout();
+  [0, 250, 1000, 2500].forEach(scheduleRetry);
   window.addEventListener('resize', scheduleMount, { passive: true });
+  window.addEventListener('pageshow', scheduleMount);
   return () => {
-    shadowObserver.disconnect();
-    navObserver.disconnect();
+    retryTimers.forEach((timer) => window.clearTimeout(timer));
+    retryTimers.clear();
     window.removeEventListener('resize', scheduleMount);
+    window.removeEventListener('pageshow', scheduleMount);
     if (frame) window.cancelAnimationFrame(frame);
   };
 }
