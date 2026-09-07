@@ -30,6 +30,7 @@ import './account-center.css';
 import './contextual-locaio.css';
 import './app-recovery.css';
 import './nexus-mobile-nav.css';
+import './processing-experience.css';
 
 installChunkRecoveryGuard();
 installAuthenticatedDownloads();
