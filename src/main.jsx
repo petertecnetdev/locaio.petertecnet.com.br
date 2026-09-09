@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import AppRecoveryBoundary from './components/AppRecoveryBoundary.jsx';
 import ContextualLocaio from './components/ContextualLocaio.jsx';
 import PublicSignaturePage from './PublicSignaturePage.jsx';
+import SubscriptionPlansPage from './SubscriptionPlansPage.jsx';
 import PeterAccountGateway from './components/PeterAccountGateway.jsx';
 import { API_BASE_URL, APP_SLUG } from './services/api.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
@@ -26,6 +27,7 @@ import './operational-command-bar.css';
 import './contract-workflow.css';
 import './context-payment-guard.css';
 import './public-signature.css';
+import './subscription-plans.css';
 import './account-center.css';
 import './contextual-locaio.css';
 import './app-recovery.css';
@@ -39,16 +41,21 @@ installGoogleIdentityGuard();
 installPeterWhatsappFallback();
 
 const signatureMatch = window.location.pathname.match(/^\/sign\/([A-Za-z0-9]{40,128})\/?$/);
+const subscriptionPlansMatch = /^\/planos\/?$/.test(window.location.pathname);
 const root = createRoot(document.getElementById('root'));
 const application = (
   <AppRecoveryBoundary>
-    <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
-      {signatureMatch ? (
-        <PublicSignaturePage token={signatureMatch[1]} />
-      ) : (
-        <ContextualLocaio />
-      )}
-    </PeterAccountGateway>
+    {subscriptionPlansMatch ? (
+      <SubscriptionPlansPage />
+    ) : (
+      <PeterAccountGateway apiBaseUrl={API_BASE_URL} appSlug={APP_SLUG}>
+        {signatureMatch ? (
+          <PublicSignaturePage token={signatureMatch[1]} />
+        ) : (
+          <ContextualLocaio />
+        )}
+      </PeterAccountGateway>
+    )}
   </AppRecoveryBoundary>
 );
 
@@ -58,7 +65,7 @@ const application = (
 root.render(import.meta.env.DEV ? <StrictMode>{application}</StrictMode> : application);
 
 async function installOptionalEnhancements() {
-  if (signatureMatch) return;
+  if (signatureMatch || subscriptionPlansMatch) return;
 
   try {
     const [
@@ -92,7 +99,7 @@ async function installOptionalEnhancements() {
 // O primeiro paint, a autenticação e o dashboard são prioritários. Os módulos
 // DOM-enhancement entram depois, em chunks separados, quando o navegador estiver
 // ocioso ou após um pequeno limite para garantir disponibilidade em máquinas ocupadas.
-if (!signatureMatch) {
+if (!signatureMatch && !subscriptionPlansMatch) {
   if (typeof window.requestIdleCallback === 'function') {
     window.requestIdleCallback(() => installOptionalEnhancements(), { timeout: 1400 });
   } else {
