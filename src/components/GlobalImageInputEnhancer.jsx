@@ -232,18 +232,23 @@ export default function GlobalImageInputEnhancer() {
 
     enhanceTree(document);
 
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        mutation.addedNodes.forEach((node) => {
-          if (node instanceof HTMLElement) enhanceTree(node);
-        });
-      });
-    });
+    let scheduled = 0;
+    const scheduleEnhance = () => {
+      window.clearTimeout(scheduled);
+      scheduled = window.setTimeout(() => enhanceTree(document), 0);
+    };
 
-    observer.observe(document.body, { childList: true, subtree: true });
+    document.addEventListener("click", scheduleEnhance, true);
+    document.addEventListener("focusin", scheduleEnhance, true);
+    window.addEventListener("popstate", scheduleEnhance);
+    window.addEventListener("hashchange", scheduleEnhance);
 
     return () => {
-      observer.disconnect();
+      window.clearTimeout(scheduled);
+      document.removeEventListener("click", scheduleEnhance, true);
+      document.removeEventListener("focusin", scheduleEnhance, true);
+      window.removeEventListener("popstate", scheduleEnhance);
+      window.removeEventListener("hashchange", scheduleEnhance);
       cleanups.forEach((cleanup) => cleanup());
       cleanups.clear();
     };
