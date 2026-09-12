@@ -5,6 +5,7 @@ import ContextualLocaio from './components/ContextualLocaio.jsx';
 import PublicSignaturePage from './PublicSignaturePage.jsx';
 import SubscriptionPlansPage from './SubscriptionPlansPage.jsx';
 import PeterAccountGateway from './components/PeterAccountGateway.jsx';
+import GlobalImageInputEnhancer from './components/GlobalImageInputEnhancer.jsx';
 import { API_BASE_URL, APP_SLUG } from './services/api.js';
 import { installAuthenticatedDownloads } from './services/downloadBridge.js';
 import { installGoogleIdentityGuard } from './services/googleIdentityGuard.js';
@@ -44,6 +45,7 @@ const signatureMatch = window.location.pathname.match(/^\/sign\/([A-Za-z0-9]{40,
 const subscriptionPlansMatch = /^\/planos\/?$/.test(window.location.pathname);
 const root = createRoot(document.getElementById('root'));
 const application = (
+  <>
   <AppRecoveryBoundary>
     {subscriptionPlansMatch ? (
       <SubscriptionPlansPage />
@@ -57,6 +59,8 @@ const application = (
       </PeterAccountGateway>
     )}
   </AppRecoveryBoundary>
+  <GlobalImageInputEnhancer />
+  </>
 );
 
 // StrictMode continua ativo durante desenvolvimento, onde sua dupla execução de
