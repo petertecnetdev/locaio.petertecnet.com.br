@@ -1,0 +1,24 @@
+name: Commercial readiness
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: SEO assets
+        run: |
+          test -s public/robots.txt
+          test -s public/sitemap.xml
+          grep -q 'gestao-de-aluguel' public/sitemap.xml
+          grep -q 'cobranca-de-aluguel' public/sitemap.xml
+      - name: Commercial acceptance gate exists
+        run: test -s docs/COMMERCIAL_READINESS.md
