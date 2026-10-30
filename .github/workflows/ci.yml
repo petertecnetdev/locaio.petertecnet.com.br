@@ -23,4 +23,8 @@ jobs:
         run: node scripts/architecture-guard.mjs
       - name: Validate production smoke syntax
         run: node --check scripts/production-smoke.mjs
+      - name: Testar isolamento de sessão HTTP 401
+        run: npm run test:session
+      - name: Testar origem confiável de downloads autenticados
+        run: npm run test:downloads
       - run: npm run build
