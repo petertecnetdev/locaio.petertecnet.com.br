@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isTrustedDocumentDownloadUrl } from '../src/services/documentDownloadGuard.js';
+import { isTrustedDocumentDownloadUrl, safeDocumentFilename } from '../src/services/documentDownloadGuard.js';
 
 const base = 'https://api.petertecnet.com.br/api';
 const origin = 'https://locaio.petertecnet.com.br';
@@ -28,4 +28,22 @@ test('rejeita rota sem prefixo API e documento de outro aplicativo', () => {
 test('rejeita caminho de documento fora de leases e URL inválida', () => {
   assert.equal(allows('https://api.petertecnet.com.br/api/v1/apps/locaio/documents/456'), false);
   assert.equal(allows('http://[invalid'), false);
+});
+
+test('preserva nomes UTF-8 enviados por Content-Disposition', () => {
+  assert.equal(safeDocumentFilename("attachment; filename*=UTF-8''contrato%20de%20loca%C3%A7%C3%A3o.pdf"), 'contrato de locação.pdf');
+  assert.equal(safeDocumentFilename('attachment; filename="recibo.pdf"'), 'recibo.pdf');
+});
+
+test('remove diretórios e caracteres perigosos do nome recebido', () => {
+  assert.equal(safeDocumentFilename('attachment; filename="../../contrato.pdf"'), 'contrato.pdf');
+  assert.equal(safeDocumentFilename("attachment; filename*=UTF-8''..%2F..%2Fsegredo%0A.pdf"), 'segredo_.pdf');
+  assert.equal(safeDocumentFilename('attachment; filename="C:\\temp\\recibo.pdf"'), 'recibo.pdf');
+});
+
+test('nome inválido, reservado ou codificação incorreta não interrompe download', () => {
+  assert.equal(safeDocumentFilename(''), 'documento');
+  assert.equal(safeDocumentFilename('attachment; filename=".."'), 'documento');
+  assert.equal(safeDocumentFilename('attachment; filename="CON.txt"'), 'documento-CON.txt');
+  assert.equal(safeDocumentFilename("attachment; filename*=UTF-8''fatura%ZZ.pdf"), 'fatura%ZZ.pdf');
 });

@@ -15,3 +15,30 @@ export function isTrustedDocumentDownloadUrl(href, apiBaseUrl, appSlug, origin) 
     return false;
   }
 }
+
+/**
+ * O nome recebido no Content-Disposition não é confiável: remove diretórios,
+ * caracteres de controle e nomes reservados antes de preencher `download`.
+ */
+export function safeDocumentFilename(disposition) {
+  const header = String(disposition || '');
+  const extended = header.match(/(?:^|;)\s*filename\*\s*=\s*UTF-8'[^']*'([^;]+)/i);
+  let filename = '';
+
+  if (extended) {
+    const encoded = extended[1].trim().replace(/^"|"$/g, '');
+    try { filename = decodeURIComponent(encoded); } catch { filename = encoded; }
+  }
+  if (!filename) {
+    const basic = header.match(/(?:^|;)\s*filename\s*=\s*(?:"([^"]*)"|([^;]*))/i);
+    filename = basic?.[1] ?? basic?.[2] ?? '';
+  }
+
+  const clean = String(filename).split(/[\\/]/).pop()
+    .replace(/[\u0000-\u001f\u007f<>:"|?*]/g, '_')
+    .trim().replace(/[. ]+$/g, '').slice(0, 180);
+
+  if (!clean || /^\.+$/.test(clean)) return 'documento';
+  if (/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(clean)) return `documento-${clean}`;
+  return clean;
+}
