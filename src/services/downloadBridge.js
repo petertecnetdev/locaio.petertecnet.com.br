@@ -1,4 +1,5 @@
-import { APP_SLUG } from './api.js';
+import { API_BASE_URL, APP_SLUG } from './api.js';
+import { isTrustedDocumentDownloadUrl } from './documentDownloadGuard.js';
 
 export function installAuthenticatedDownloads() {
   const handler = async (event) => {
@@ -6,7 +7,7 @@ export function installAuthenticatedDownloads() {
     if (!anchor) return;
     let url;
     try { url = new URL(anchor.href, window.location.origin); } catch { return; }
-    if (!url.pathname.includes(`/v1/apps/${APP_SLUG}/leases/`) || !url.pathname.includes('/documents/')) return;
+    if (!isTrustedDocumentDownloadUrl(url.toString(), API_BASE_URL, APP_SLUG, window.location.origin)) return;
     event.preventDefault();
     const token = localStorage.getItem('token');
     if (!token) return;
