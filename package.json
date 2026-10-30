@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "node scripts/build.mjs",
     "preview": "vite preview",
-    "check": "node scripts/architecture-guard.mjs && node scripts/context-policy-guard.mjs && node scripts/build.mjs"
+    "check": "node scripts/architecture-guard.mjs && node scripts/context-policy-guard.mjs && npm run test:session && node scripts/build.mjs",
+    "test:session": "node --test scripts/session-401-guard.test.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
