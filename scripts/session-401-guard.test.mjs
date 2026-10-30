@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { shouldInvalidateSessionForUnauthorized } from '../src/services/session401Guard.js';
+import { isCurrentAuthSession, shouldInvalidateSessionForUnauthorized } from '../src/services/session401Guard.js';
 
 const current = { token: 'token-B', role: 'landlord', epoch: 2 };
 const unauthorized = (snapshot, url = '/v1/apps/locaio/properties', status = 401) => ({
@@ -38,4 +38,23 @@ test('401 de login/cadastro não invalida sessão ativa', () => {
 test('403 e respostas de erro sem request não invalidam a sessão', () => {
   assert.equal(shouldInvalidateSessionForUnauthorized(unauthorized(current, undefined, 403), current), false);
   assert.equal(shouldInvalidateSessionForUnauthorized({ response: { status: 401 } }, current), false);
+});
+
+test('respostas de leitura da sessão A não devem sobrescrever dados de B', () => {
+  assert.equal(isCurrentAuthSession({ ...current, token: 'token-A' }, current), false);
+  assert.equal(isCurrentAuthSession({ ...current, epoch: 1 }, current), false);
+  assert.equal(isCurrentAuthSession({ ...current, role: 'tenant' }, current), false);
+  assert.equal(isCurrentAuthSession(current, current), true);
+});
+
+test('revogação tardia de logout nunca encerra novo login', () => {
+  const logout401 = unauthorized({ ...current, token: 'token-A', epoch: 1 });
+  logout401.config.url = '/auth/logout';
+  logout401.config.__locaioSkipAuthInvalidation = true;
+  assert.equal(shouldInvalidateSessionForUnauthorized(logout401, current), false);
+});
+
+test('respostas sem credenciais não são atribuídas à sessão atual', () => {
+  assert.equal(isCurrentAuthSession({ token: null, role: 'landlord', epoch: 2 }, current), false);
+  assert.equal(isCurrentAuthSession(current, { token: null, role: 'landlord', epoch: 2 }), false);
 });
