@@ -141,3 +141,11 @@ test('ignora eventos de armazenamento inválidos', () => {
   assert.equal(isAuthSessionStorageEvent({}, authStorageKeys, contextStorageKey), false);
   assert.equal(isAuthSessionStorageEvent({ key: undefined }, authStorageKeys, contextStorageKey), false);
 });
+
+
+test('ignora eventos de sessionStorage ao sincronizar a sessão da aplicação', () => {
+  const localStorageArea = {};
+  const sessionStorageArea = {};
+  assert.equal(isAuthSessionStorageEvent({ key: 'access_token', storageArea: localStorageArea }, authStorageKeys, contextStorageKey, localStorageArea), true);
+  assert.equal(isAuthSessionStorageEvent({ key: 'access_token', storageArea: sessionStorageArea }, authStorageKeys, contextStorageKey, localStorageArea), false);
+});

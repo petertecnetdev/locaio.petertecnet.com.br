@@ -4,9 +4,9 @@ import {
   FiDollarSign, FiDownload, FiEye, FiEyeOff, FiFileText, FiHome, FiKey, FiLogOut, FiMail,
   FiMapPin, FiPlus, FiRefreshCw, FiSend, FiShield, FiTrash2, FiUpload, FiUser,
 } from 'react-icons/fi';
-import api, { CONTEXT_STORAGE_KEY, appApi, errorMessage, getCurrentAuthSession, isAuthSessionCurrent, logoutSession, storeSession, withAuthSession } from './services/api.js';
+import api, { AUTH_STORAGE_KEYS, CONTEXT_STORAGE_KEY, appApi, errorMessage, getCurrentAuthSession, isAuthSessionCurrent, logoutSession, storeSession, withAuthSession } from './services/api.js';
 import { createLeaseIdempotencyKey } from './services/leaseIdempotency.js';
-import { shouldApplyLatestSessionResponse } from './services/session401Guard.js';
+import { isAuthSessionStorageEvent, shouldApplyLatestSessionResponse } from './services/session401Guard.js';
 import { createSingleFlightGuard } from './services/singleFlightGuard.js';
 import {
   ConfirmDialog, Donut, EmptyState, MetricCard, MiniBars, Modal, PageHeader, Skeleton, StatusBadge,
@@ -196,7 +196,7 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
       void load();
     };
     const handleStorage = (event) => {
-      if (event.key === null || event.key === 'token' || event.key === CONTEXT_STORAGE_KEY) resetForSessionChange();
+      if (isAuthSessionStorageEvent(event, AUTH_STORAGE_KEYS, CONTEXT_STORAGE_KEY, localStorage)) resetForSessionChange();
     };
 
     setData(null); setDataSession(null); setContract(null); setTimeline([]); setProposal(null);
@@ -380,7 +380,7 @@ export default function AppV3() {
       if (hasSession) load();
     };
     const handleStorage = (event) => {
-      if (event.key === null || event.key === 'token' || event.key === CONTEXT_STORAGE_KEY) refreshForSessionChange();
+      if (isAuthSessionStorageEvent(event, AUTH_STORAGE_KEYS, CONTEXT_STORAGE_KEY, localStorage)) refreshForSessionChange();
     };
     window.addEventListener('authChanged', refreshForSessionChange);
     window.addEventListener('peterContextChanged', refreshForSessionChange);
