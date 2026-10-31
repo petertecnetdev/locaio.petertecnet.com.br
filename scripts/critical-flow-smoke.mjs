@@ -1,4 +1,5 @@
 import puppeteer from 'puppeteer-core';
+import { buildSmokeCorsHeaders, buildSmokePreflightResponse } from './smoke-cors.mjs';
 
 const BASE_URL = process.env.BASE_URL || 'https://locaio.petertecnet.com.br/';
 const BROWSER = process.env.BROWSER;
@@ -113,12 +114,7 @@ function contractDocument(status = 'review') {
 function jsonResponse(request, payload, status = 200) {
   return request.respond({
     status,
-    headers: {
-      'access-control-allow-origin': new URL(BASE_URL).origin,
-      'access-control-allow-headers': 'Authorization, Content-Type, X-Peter-App, X-Frontend-Page, X-Peter-Context-Role, X-Peter-Ecosystem-SDK',
-      'access-control-allow-methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS',
-      'content-type': 'application/json; charset=utf-8',
-    },
+    headers: buildSmokeCorsHeaders(new URL(BASE_URL).origin),
     body: JSON.stringify(payload ?? {}),
   });
 }
@@ -129,7 +125,7 @@ async function handleApiRequest(request) {
   const method = request.method();
   state.calls.push(`${method} ${path}`);
 
-  if (method === 'OPTIONS') return request.respond({ status: 204, body: '' });
+  if (method === 'OPTIONS') return request.respond(buildSmokePreflightResponse(new URL(BASE_URL).origin));
   if (path.includes('/interactions') || path.includes('/telemetry')) return jsonResponse(request, { accepted: true }, 202);
 
   if (method === 'GET') {
