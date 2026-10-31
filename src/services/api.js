@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { isCurrentAuthSession, shouldInvalidateSessionForUnauthorized } from './session401Guard.js';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.petertecnet.com.br/api';
 export const APP_SLUG = import.meta.env.VITE_APP_SLUG || 'locaio';
@@ -9,6 +10,7 @@ const DEFAULT_READ_CACHE_TTL_MS = 2500;
 const readCache = new Map();
 const inFlightReads = new Map();
 let cacheGeneration = 0;
+let sessionEpoch = 0;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -23,6 +25,18 @@ function stableSerialize(value) {
     return `{${Object.keys(value).sort().map((key) => `${key}:${stableSerialize(value[key])}`).join(',')}}`;
   }
   return String(value);
+}
+
+export function getCurrentAuthSession() {
+  return {
+    token: localStorage.getItem('token'),
+    role: localStorage.getItem(CONTEXT_STORAGE_KEY) || null,
+    epoch: sessionEpoch,
+  };
+}
+
+export function isAuthSessionCurrent(snapshot) {
+  return isCurrentAuthSession(snapshot, getCurrentAuthSession());
 }
 
 export function clearAppReadCache() {
@@ -124,10 +138,14 @@ function mutateApp(method, path, data, config) {
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (!config.__locaioExplicitAuthorization) {
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    else delete config.headers.Authorization;
+  }
   config.headers['X-Frontend-Page'] = window.location.pathname;
 
   const contextRole = localStorage.getItem(CONTEXT_STORAGE_KEY);
+  config.__locaioAuthSnapshot = { token, role: contextRole || null, epoch: sessionEpoch };
   if (['landlord', 'tenant'].includes(contextRole)) {
     config.headers['X-Peter-Context-Role'] = contextRole;
 
@@ -148,28 +166,53 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error?.response?.status === 401 && !String(error?.config?.url || '').includes('/auth/login')) {
-      // Uma sessão expirada costuma invalidar várias requests em paralelo. A
-      // primeira resposta 401 encerra a sessão; as seguintes não precisam
-      // disparar authChanged novamente e provocar recargas de contexto em cascata.
+    if (shouldInvalidateSessionForUnauthorized(error, {
+      token: localStorage.getItem('token'),
+      role: localStorage.getItem(CONTEXT_STORAGE_KEY),
+      epoch: sessionEpoch,
+    })) {
+      // Somente a requisição iniciada pela sessão e contexto atuais pode
+      // invalidar credenciais. Respostas atrasadas A→B→A são ignoradas.
       const hadSession = SESSION_STORAGE_KEYS.some((key) => localStorage.getItem(key) !== null)
         || localStorage.getItem(CONTEXT_STORAGE_KEY) !== null;
 
-      SESSION_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
-      localStorage.removeItem(CONTEXT_STORAGE_KEY);
-      clearAppReadCache();
-
-      if (hadSession) window.dispatchEvent(new Event('authChanged'));
+      if (hadSession) endSession();
     }
     return Promise.reject(error);
   },
 );
+
+/**
+ * Invalida a sessão local imediatamente, sem esperar resposta da rede.
+ * A revogação remota usa o token capturado e nunca o de um login posterior.
+ */
+export function endSession() {
+  sessionEpoch += 1;
+  SESSION_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+  localStorage.removeItem(CONTEXT_STORAGE_KEY);
+  clearAppReadCache();
+  window.dispatchEvent(new Event('authChanged'));
+  window.dispatchEvent(new CustomEvent('peterContextChanged', { detail: { role: null } }));
+}
+
+export function logoutSession() {
+  const token = localStorage.getItem('token');
+  endSession();
+  if (!token) return Promise.resolve();
+
+  return api.post('/auth/logout', {}, {
+    headers: { Authorization: `Bearer ${token}` },
+    __locaioExplicitAuthorization: true,
+    __locaioSkipAuthInvalidation: true,
+  }).catch(() => undefined);
+}
 
 export const setContextRole = (role) => {
   const nextRole = ['landlord', 'tenant'].includes(role) ? role : null;
   const currentRole = localStorage.getItem(CONTEXT_STORAGE_KEY);
   if (currentRole === nextRole) return;
 
+  sessionEpoch += 1;
   if (nextRole) localStorage.setItem(CONTEXT_STORAGE_KEY, nextRole);
   else localStorage.removeItem(CONTEXT_STORAGE_KEY);
   clearAppReadCache();
@@ -195,12 +238,16 @@ export const errorMessage = (error, fallback = 'Não foi possível concluir esta
 export const storeSession = (response) => {
   const token = response?.data?.token?.access_token || response?.data?.access_token;
   if (!token) throw new Error('A API não retornou uma sessão válida.');
+  sessionEpoch += 1;
+  const previousRole = localStorage.getItem(CONTEXT_STORAGE_KEY);
+  localStorage.removeItem(CONTEXT_STORAGE_KEY);
   localStorage.setItem('token', token);
   const user = response?.data?.token?.user || response?.data?.user;
   if (user) localStorage.setItem('user', JSON.stringify(user));
   else localStorage.removeItem('user');
   clearAppReadCache();
   window.dispatchEvent(new Event('authChanged'));
+  if (previousRole) window.dispatchEvent(new CustomEvent('peterContextChanged', { detail: { role: null } }));
   return token;
 };
 

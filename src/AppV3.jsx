@@ -4,7 +4,7 @@ import {
   FiDollarSign, FiDownload, FiEye, FiEyeOff, FiFileText, FiHome, FiKey, FiLogOut, FiMail,
   FiMapPin, FiPlus, FiRefreshCw, FiSend, FiShield, FiTrash2, FiUpload, FiUser,
 } from 'react-icons/fi';
-import api, { appApi, errorMessage, storeSession } from './services/api.js';
+import api, { appApi, errorMessage, getCurrentAuthSession, isAuthSessionCurrent, logoutSession, storeSession } from './services/api.js';
 import {
   ConfirmDialog, Donut, EmptyState, MetricCard, MiniBars, Modal, PageHeader, Skeleton, StatusBadge,
 } from './components/ui-kit.jsx';
@@ -200,10 +200,39 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
 export default function AppV3() {
   const [authenticated, setAuthenticated] = useState(Boolean(localStorage.getItem('token'))); const [loading, setLoading] = useState(authenticated); const [section, setSection] = useState('dashboard'); const [selectedLease, setSelectedLease] = useState(null); const [dashboard, setDashboard] = useState(null); const [properties, setProperties] = useState([]); const [leases, setLeases] = useState([]); const [requestedProperty, setRequestedProperty] = useState(null); const [user, setUser] = useState(() => { try { return JSON.parse(localStorage.getItem('user') || 'null'); } catch { return null; } }); const [toast, setToast] = useState(null);
   const notify = useCallback((message, type = 'success') => { setToast({ message, type }); window.clearTimeout(window.__locaioToast); window.__locaioToast = window.setTimeout(() => setToast(null), 4200); }, []);
-  const load = useCallback(async () => { if (!localStorage.getItem('token')) { setAuthenticated(false); setLoading(false); return; } setLoading(true); try { const [d, p, l, me] = await Promise.all([appApi.get('/leasing/dashboard'), appApi.get('/properties'), appApi.get('/leases'), appApi.get('/me')]); setDashboard(d.data); setProperties(p.data || []); setLeases(l.data || []); const resolvedUser = me.data?.user || me.data; if (resolvedUser?.id) { setUser(resolvedUser); localStorage.setItem('user', JSON.stringify(resolvedUser)); } setAuthenticated(true); } catch (error) { if (error?.response?.status !== 401) notify(errorMessage(error, 'Não foi possível carregar o Locaio.'), 'error'); } finally { setLoading(false); } }, [notify]);
+  const load = useCallback(async () => {
+    const session = getCurrentAuthSession();
+    if (!session.token) { setAuthenticated(false); setLoading(false); return; }
+    setLoading(true);
+    try {
+      const [d, p, l, me] = await Promise.all([appApi.get('/leasing/dashboard'), appApi.get('/properties'), appApi.get('/leases'), appApi.get('/me')]);
+      // Não aplicar dados de A após logout, troca de conta ou contexto A→B→A.
+      if (!isAuthSessionCurrent(session)) return;
+      setDashboard(d.data);
+      setProperties(p.data || []);
+      setLeases(l.data || []);
+      const resolvedUser = me.data?.user || me.data;
+      if (resolvedUser?.id) { setUser(resolvedUser); localStorage.setItem('user', JSON.stringify(resolvedUser)); }
+      setAuthenticated(true);
+    } catch (error) {
+      if (isAuthSessionCurrent(session) && error?.response?.status !== 401) notify(errorMessage(error, 'Não foi possível carregar o Locaio.'), 'error');
+    } finally {
+      if (isAuthSessionCurrent(session)) setLoading(false);
+    }
+  }, [notify]);
   useEffect(() => { if (authenticated) load(); }, [authenticated, load]);
   useEffect(() => { const handler = () => setAuthenticated(Boolean(localStorage.getItem('token'))); window.addEventListener('authChanged', handler); return () => window.removeEventListener('authChanged', handler); }, []);
-  const logout = async () => { try { await api.post('/auth/logout'); } catch { /* local logout remains valid */ } ['token', 'user', 'access_token', 'auth_token'].forEach((k) => localStorage.removeItem(k)); setAuthenticated(false); };
+  const logout = () => {
+    setAuthenticated(false);
+    setLoading(false);
+    setUser(null);
+    setDashboard(null);
+    setProperties([]);
+    setLeases([]);
+    setSelectedLease(null);
+    setRequestedProperty(null);
+    void logoutSession();
+  };
   const navigate = (next) => { setSection(next); setSelectedLease(null); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const openLease = (leaseId) => { setSelectedLease(leaseId); setSection('leases'); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const createLeaseForProperty = (propertyId) => { setRequestedProperty(propertyId); setSection('leases'); setSelectedLease(null); window.scrollTo({ top: 0, behavior: 'smooth' }); };
