@@ -4,7 +4,7 @@ import {
   FiDollarSign, FiDownload, FiEye, FiEyeOff, FiFileText, FiHome, FiKey, FiLogOut, FiMail,
   FiMapPin, FiPlus, FiRefreshCw, FiSend, FiShield, FiTrash2, FiUpload, FiUser,
 } from 'react-icons/fi';
-import api, { CONTEXT_STORAGE_KEY, appApi, errorMessage, getCurrentAuthSession, isAuthSessionCurrent, logoutSession, storeSession } from './services/api.js';
+import api, { CONTEXT_STORAGE_KEY, appApi, errorMessage, getCurrentAuthSession, isAuthSessionCurrent, logoutSession, storeSession, withAuthSession } from './services/api.js';
 import { createLeaseIdempotencyKey } from './services/leaseIdempotency.js';
 import { shouldApplyLatestSessionResponse } from './services/session401Guard.js';
 import { createSingleFlightGuard } from './services/singleFlightGuard.js';
@@ -173,7 +173,7 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
     }
 
     try {
-      const [leaseResponse, contractResponse] = await Promise.all([appApi.get(`/leases/${id}`), appApi.get(`/leases/${id}/contract`).catch(() => ({ data: { document: null, timeline: [] } }))]);
+      const [leaseResponse, contractResponse] = await Promise.all([appApi.get(`/leases/${id}`, withAuthSession(session)), appApi.get(`/leases/${id}/contract`, withAuthSession(session)).catch(() => ({ data: { document: null, timeline: [] } }))]);
       if (!shouldApplyLatestSessionResponse(requestId, loadSequence.current, session, getCurrentAuthSession())) return;
       setData(leaseResponse.data); setDataSession(session);
       setContract(contractResponse.data?.document || null); setTimeline(contractResponse.data?.timeline || []);
@@ -245,7 +245,7 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
     const session = getCurrentAuthSession();
     if (!session.token) return null;
     try {
-      const response = await appApi.post(`/leases/${id}/proposal/generate`);
+      const response = await appApi.post(`/leases/${id}/proposal/generate`, {}, withAuthSession(session));
       if (!isAuthSessionCurrent(session)) return null;
       setProposal(response.data?.document || null);
       notify('Proposta gerada para revisão das condições.');
@@ -255,19 +255,19 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
       return null;
     }
   });
-  const generate = () => act(() => appApi.post(`/leases/${id}/contract/generate`), contract ? 'Nova versão do contrato criada sem apagar o histórico anterior.' : 'Contrato gerado com snapshot dos dados da locação.');
+  const generate = () => act((session) => appApi.post(`/leases/${id}/contract/generate`, {}, withAuthSession(session)), contract ? 'Nova versão do contrato criada sem apagar o histórico anterior.' : 'Contrato gerado com snapshot dos dados da locação.');
   const send = () => act(async (session) => {
     const idempotencyKey = await createLeaseIdempotencyKey('contract-send', l, {
       version: latestVersion?.version ?? contract?.current_version ?? l.contract_version,
       documentId: contract?.public_id,
     });
     if (!isAuthSessionCurrent(session)) return null;
-    return appApi.post(`/leases/${id}/contract/send`, {}, { headers: { 'Idempotency-Key': idempotencyKey } });
+    return appApi.post(`/leases/${id}/contract/send`, {}, withAuthSession(session, { headers: { 'Idempotency-Key': idempotencyKey } }));
   }, 'Versão bloqueada e enviada ao inquilino para assinatura.');
   const schedule = () => act(async (session) => {
     const idempotencyKey = await createLeaseIdempotencyKey('schedule', l);
     if (!isAuthSessionCurrent(session)) return null;
-    return appApi.post(`/leases/${id}/charges/schedule`, {}, { headers: { 'Idempotency-Key': idempotencyKey } });
+    return appApi.post(`/leases/${id}/charges/schedule`, {}, withAuthSession(session, { headers: { 'Idempotency-Key': idempotencyKey } }));
   }, 'Cronograma financeiro atualizado.');
   const sign = () => act(async (session) => {
     const party = owner ? 'landlord' : 'tenant';
@@ -279,9 +279,9 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
       signerName,
     });
     if (!isAuthSessionCurrent(session)) return null;
-    return appApi.post(`/leases/${id}/contract/sign`, { party, signer_name: signerName, accepted: true }, {
+    return appApi.post(`/leases/${id}/contract/sign`, { party, signer_name: signerName, accepted: true }, withAuthSession(session, {
       headers: { 'Idempotency-Key': idempotencyKey },
-    });
+    }));
   }, 'Assinatura eletrônica vinculada à versão imutável.');
   const upload = async (event) => {
     const input = event.currentTarget;
@@ -299,7 +299,7 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
         body.append('category', 'identity');
         body.append('file', file);
         try {
-          await appApi.post(`/leases/${id}/documents`, body, { headers: { 'Content-Type': 'multipart/form-data' } });
+          await appApi.post(`/leases/${id}/documents`, body, withAuthSession(session, { headers: { 'Content-Type': 'multipart/form-data' } }));
           if (!isAuthSessionCurrent(session)) return null;
           notify('Documento enviado.');
           await load();
@@ -319,15 +319,15 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
   const pay = (charge, method) => act(async (session) => {
     const idempotencyKey = await createLeaseIdempotencyKey('payment', l, { charge, method });
     if (!isAuthSessionCurrent(session)) return null;
-    return appApi.post(`/leases/${id}/charges/${charge.id}/payment`, { method }, { headers: { 'Idempotency-Key': idempotencyKey } });
+    return appApi.post(`/leases/${id}/charges/${charge.id}/payment`, { method }, withAuthSession(session, { headers: { 'Idempotency-Key': idempotencyKey } }));
   }, `Cobrança preparada para ${method === 'pix' ? 'Pix' : method === 'boleto' ? 'boleto' : 'cartão'}.`);
   const markPaid = (charge) => act(async (session) => {
     const paymentMethod = charge.payment_method || 'transfer';
     const idempotencyKey = await createLeaseIdempotencyKey('mark-paid', l, { charge, method: paymentMethod });
     if (!isAuthSessionCurrent(session)) return null;
-    return appApi.patch(`/leases/${id}/charges/${charge.id}/paid`, { payment_method: paymentMethod }, { headers: { 'Idempotency-Key': idempotencyKey } });
+    return appApi.patch(`/leases/${id}/charges/${charge.id}/paid`, { payment_method: paymentMethod }, withAuthSession(session, { headers: { 'Idempotency-Key': idempotencyKey } }));
   }, 'Pagamento marcado como recebido.');
-  const saveAmendment = async () => { if (!amendment.title.trim() || !amendment.label.trim() || !amendment.value.trim()) return; const response = await act(() => appApi.post(`/leases/${id}/contract/amendments`, { title: amendment.title.trim(), changes: [{ label: amendment.label.trim(), value: amendment.value.trim() }] }), 'Aditivo criado e vinculado ao contrato original.'); if (response) { setAmendmentOpen(false); setAmendment({ title: '', label: '', value: '' }); } };
+  const saveAmendment = async () => { if (!amendment.title.trim() || !amendment.label.trim() || !amendment.value.trim()) return; const response = await act((session) => appApi.post(`/leases/${id}/contract/amendments`, { title: amendment.title.trim(), changes: [{ label: amendment.label.trim(), value: amendment.value.trim() }] }, withAuthSession(session)), 'Aditivo criado e vinculado ao contrato original.'); if (response) { setAmendmentOpen(false); setAmendment({ title: '', label: '', value: '' }); } };
   const documentStatus = contract?.status || (l.contract_text ? 'review' : 'draft');
   const content = latestVersion?.content || l.contract_text;
   const canAmend = owner && (l.status === 'active' || contract?.status === 'signed');

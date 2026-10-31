@@ -13,6 +13,25 @@ export function isCurrentAuthSession(started, current) {
   );
 }
 
+/**
+ * Resolve a sessão que pode autorizar o envio. Um snapshot explícito nunca
+ * pode ser substituído silenciosamente pelas credenciais de outra conta.
+ * Chamadas públicas anônimas continuam válidas enquanto o contexto não muda.
+ */
+export function resolveRequestAuthSession(expectedSession, currentSession) {
+  if (expectedSession === undefined) return currentSession;
+  if (!expectedSession || !currentSession) return null;
+
+  if (expectedSession.token || currentSession.token) {
+    return isCurrentAuthSession(expectedSession, currentSession) ? expectedSession : null;
+  }
+
+  return expectedSession.epoch === currentSession.epoch
+    && (expectedSession.role || null) === (currentSession.role || null)
+    ? expectedSession
+    : null;
+}
+
 /** Só aplica respostas da última leitura iniciada na mesma sessão autenticada. */
 export function shouldApplyLatestSessionResponse(requestId, latestRequestId, startedSession, currentSession) {
   return Number.isSafeInteger(requestId)

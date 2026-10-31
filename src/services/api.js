@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { isCurrentAuthSession, shouldInvalidateSessionForUnauthorized } from './session401Guard.js';
+import { isCurrentAuthSession, resolveRequestAuthSession, shouldInvalidateSessionForUnauthorized } from './session401Guard.js';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.petertecnet.com.br/api';
 export const APP_SLUG = import.meta.env.VITE_APP_SLUG || 'locaio';
@@ -39,6 +39,10 @@ export function isAuthSessionCurrent(snapshot) {
   return isCurrentAuthSession(snapshot, getCurrentAuthSession());
 }
 
+export function withAuthSession(session, config = {}) {
+  return { ...config, __locaioExpectedAuthSession: session };
+}
+
 export function clearAppReadCache() {
   cacheGeneration += 1;
   readCache.clear();
@@ -72,35 +76,59 @@ export function appMutationPolicy(role, method, path) {
   return { allowed: true, code: null, message: null };
 }
 
-function readKey(path, config) {
-  const role = localStorage.getItem(CONTEXT_STORAGE_KEY) || 'none';
-  return `${cacheGeneration}|${role}|${path}|${stableSerialize(config?.params || null)}`;
+function readKey(path, config, session) {
+  const role = session?.role || 'none';
+  return `${cacheGeneration}|${session?.token || 'anonymous'}|${session?.epoch ?? 0}|${role}|${path}|${stableSerialize(config?.params || null)}`;
 }
 
 function cachedAppGet(path, config = {}) {
   const {
     cache = true,
     cacheTtl = DEFAULT_READ_CACHE_TTL_MS,
+    __locaioExpectedAuthSession,
     ...axiosConfig
   } = config || {};
+  const expectedSession = __locaioExpectedAuthSession === undefined
+    ? getCurrentAuthSession()
+    : __locaioExpectedAuthSession;
+  const requestConfig = { ...axiosConfig, __locaioExpectedAuthSession: expectedSession };
+  const currentExpectedSession = () => resolveRequestAuthSession(expectedSession, getCurrentAuthSession());
   const url = `/v1/apps/${APP_SLUG}${path}`;
 
-  if (!cache || axiosConfig.responseType === 'blob' || Number(cacheTtl) <= 0) {
-    return api.get(url, axiosConfig);
+  if (!currentExpectedSession()) {
+    return Promise.reject(new axios.CanceledError('A sessão mudou antes do envio da requisição.'));
   }
 
-  const key = readKey(path, axiosConfig);
+  if (!cache || requestConfig.responseType === 'blob' || Number(cacheTtl) <= 0) {
+    return api.get(url, requestConfig).then((response) => {
+      if (!currentExpectedSession()) throw new axios.CanceledError('A sessão mudou durante a consulta.');
+      return response;
+    });
+  }
+
+  const key = readKey(path, axiosConfig, expectedSession);
   const now = Date.now();
   const cached = readCache.get(key);
-  if (cached && cached.expiresAt > now) return Promise.resolve(cached.response);
+  if (cached && cached.expiresAt > now) {
+    return Promise.resolve(cached.response).then((response) => {
+      if (!currentExpectedSession()) throw new axios.CanceledError('A sessão mudou durante a consulta.');
+      return response;
+    });
+  }
   if (cached) readCache.delete(key);
 
   const pending = inFlightReads.get(key);
-  if (pending) return pending;
+  if (pending) {
+    return pending.then((response) => {
+      if (!currentExpectedSession()) throw new axios.CanceledError('A sessão mudou durante a consulta.');
+      return response;
+    });
+  }
 
   const generation = cacheGeneration;
-  const request = api.get(url, axiosConfig)
+  const request = api.get(url, requestConfig)
     .then((response) => {
+      if (!currentExpectedSession()) throw new axios.CanceledError('A sessão mudou durante a consulta.');
       if (generation === cacheGeneration) {
         readCache.set(key, {
           expiresAt: Date.now() + Math.max(0, Number(cacheTtl) || DEFAULT_READ_CACHE_TTL_MS),
@@ -115,9 +143,13 @@ function cachedAppGet(path, config = {}) {
   return request;
 }
 
-function mutateApp(method, path, data, config) {
-  const role = localStorage.getItem(CONTEXT_STORAGE_KEY);
-  const policy = appMutationPolicy(role, method, path);
+function mutateApp(method, path, data, config = {}) {
+  const options = config || {};
+  const expectedSession = options.__locaioExpectedAuthSession === undefined
+    ? getCurrentAuthSession()
+    : options.__locaioExpectedAuthSession;
+  const requestConfig = { ...options, __locaioExpectedAuthSession: expectedSession };
+  const policy = appMutationPolicy(expectedSession?.role || null, method, path);
   if (!policy.allowed) {
     const error = new Error(policy.message);
     error.code = policy.code;
@@ -127,25 +159,33 @@ function mutateApp(method, path, data, config) {
 
   const url = `/v1/apps/${APP_SLUG}${path}`;
   const request = method === 'delete'
-    ? api.delete(url, config)
-    : api[method](url, data, config);
+    ? api.delete(url, requestConfig)
+    : api[method](url, data, requestConfig);
 
   return request.then((response) => {
     clearAppReadCache();
+    if (!resolveRequestAuthSession(expectedSession, getCurrentAuthSession())) {
+      throw new axios.CanceledError('A sessão mudou durante a operação.');
+    }
     return response;
   });
 }
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const requestSession = resolveRequestAuthSession(config.__locaioExpectedAuthSession, getCurrentAuthSession());
+  if (!requestSession) {
+    throw new axios.CanceledError('A sessão mudou antes do envio da requisição.');
+  }
+
+  const token = requestSession.token;
   if (!config.__locaioExplicitAuthorization) {
     if (token) config.headers.Authorization = `Bearer ${token}`;
     else delete config.headers.Authorization;
   }
   config.headers['X-Frontend-Page'] = window.location.pathname;
 
-  const contextRole = localStorage.getItem(CONTEXT_STORAGE_KEY);
-  config.__locaioAuthSnapshot = { token, role: contextRole || null, epoch: sessionEpoch };
+  const contextRole = requestSession.role;
+  config.__locaioAuthSnapshot = requestSession;
   if (['landlord', 'tenant'].includes(contextRole)) {
     config.headers['X-Peter-Context-Role'] = contextRole;
 

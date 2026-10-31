@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isCurrentAuthSession, shouldApplyLatestSessionResponse, shouldInvalidateSessionForUnauthorized } from '../src/services/session401Guard.js';
+import { isCurrentAuthSession, resolveRequestAuthSession, shouldApplyLatestSessionResponse, shouldInvalidateSessionForUnauthorized } from '../src/services/session401Guard.js';
 
 const current = { token: 'token-B', role: 'landlord', epoch: 2 };
 const unauthorized = (snapshot, url = '/v1/apps/locaio/properties', status = 401) => ({
@@ -76,4 +76,35 @@ test('rejeita identificadores de leitura inválidos ou sem sessão', () => {
   assert.equal(shouldApplyLatestSessionResponse(Number.NaN, 3, current, current), false);
   assert.equal(shouldApplyLatestSessionResponse(3, 3, { ...current, token: null }, current), false);
   assert.equal(shouldApplyLatestSessionResponse(3, 3, current, { ...current, token: null }), false);
+});
+
+
+test('mantém o snapshot esperado quando a sessão não mudou', () => {
+  assert.deepEqual(resolveRequestAuthSession(current, current), current);
+});
+
+test('bloqueia o envio quando o token muda antes do interceptor', () => {
+  assert.equal(resolveRequestAuthSession({ ...current, token: 'token-A' }, current), null);
+});
+
+test('bloqueia o envio quando a geração muda mesmo com token igual', () => {
+  assert.equal(resolveRequestAuthSession(current, { ...current, epoch: current.epoch + 1 }), null);
+});
+
+test('bloqueia o envio quando o contexto muda', () => {
+  assert.equal(resolveRequestAuthSession(current, { ...current, role: 'tenant' }), null);
+});
+
+test('usa a sessão atual para chamadas sem snapshot explícito', () => {
+  assert.deepEqual(resolveRequestAuthSession(undefined, current), current);
+});
+
+test('preserva chamadas públicas quando ambas as sessões estão anônimas e iguais', () => {
+  const anonymous = { token: null, role: null, epoch: 0 };
+  assert.deepEqual(resolveRequestAuthSession(anonymous, anonymous), anonymous);
+});
+
+test('bloqueia chamada pública antiga quando uma sessão autenticada começa', () => {
+  const anonymous = { token: null, role: null, epoch: 0 };
+  assert.equal(resolveRequestAuthSession(anonymous, current), null);
 });
