@@ -170,7 +170,13 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
   const act = async (fn, success) => { setBusy(true); try { const response = await fn(); if (success) notify(success); await load(); await refreshAll(); return response; } catch (error) { notify(errorMessage(error), 'error'); return null; } finally { setBusy(false); } };
   const generateProposal = async () => { setBusy(true); try { const response = await appApi.post(`/leases/${id}/proposal/generate`); setProposal(response.data?.document || null); notify('Proposta gerada para revisão das condições.'); } catch (error) { notify(errorMessage(error), 'error'); } finally { setBusy(false); } };
   const generate = () => act(() => appApi.post(`/leases/${id}/contract/generate`), contract ? 'Nova versão do contrato criada sem apagar o histórico anterior.' : 'Contrato gerado com snapshot dos dados da locação.');
-  const send = () => act(() => appApi.post(`/leases/${id}/contract/send`), 'Versão bloqueada e enviada ao inquilino para assinatura.');
+  const send = () => act(async () => {
+    const idempotencyKey = await createLeaseIdempotencyKey('contract-send', l, {
+      version: latestVersion?.version ?? contract?.current_version ?? l.contract_version,
+      documentId: contract?.public_id,
+    });
+    return appApi.post(`/leases/${id}/contract/send`, {}, { headers: { 'Idempotency-Key': idempotencyKey } });
+  }, 'Versão bloqueada e enviada ao inquilino para assinatura.');
   const schedule = () => act(async () => {
     const idempotencyKey = await createLeaseIdempotencyKey('schedule', l);
     return appApi.post(`/leases/${id}/charges/schedule`, {}, { headers: { 'Idempotency-Key': idempotencyKey } });

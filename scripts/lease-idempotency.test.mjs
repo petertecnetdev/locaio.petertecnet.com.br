@@ -52,3 +52,25 @@ test('rejeita operação ou identificadores inválidos antes da requisição', a
   await assert.rejects(() => createLeaseIdempotencyKey('schedule', { ...lease, id: null }), TypeError);
   await assert.rejects(() => createLeaseIdempotencyKey('payment', lease, { charge: { id: 7 }, method: 'cash' }), TypeError);
 });
+
+test('reutiliza a chave ao reenviar a mesma versão contratual', async () => {
+  const options = { version: 3, documentId: 'contract-uuid-42' };
+  const first = await createLeaseIdempotencyKey('contract-send', lease, options);
+  const retry = await createLeaseIdempotencyKey('contract-send', lease, { ...options });
+  assert.equal(first, retry);
+  assert.match(first, /^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$/);
+});
+
+test('gera chave nova para outra versão ou documento contratual', async () => {
+  const original = await createLeaseIdempotencyKey('contract-send', lease, { version: 3, documentId: 'contract-uuid-42' });
+  const revisedVersion = await createLeaseIdempotencyKey('contract-send', lease, { version: 4, documentId: 'contract-uuid-42' });
+  const newDocument = await createLeaseIdempotencyKey('contract-send', lease, { version: 3, documentId: 'contract-uuid-43' });
+  assert.notEqual(original, revisedVersion);
+  assert.notEqual(original, newDocument);
+});
+
+test('rejeita versão ou identificador de documento inválidos no envio', async () => {
+  await assert.rejects(() => createLeaseIdempotencyKey('contract-send', lease, { version: 'v3' }), TypeError);
+  await assert.rejects(() => createLeaseIdempotencyKey('contract-send', lease, { version: 3, documentId: '../outside' }), TypeError);
+});
+

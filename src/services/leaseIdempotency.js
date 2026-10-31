@@ -1,4 +1,4 @@
-const SUPPORTED_OPERATIONS = new Set(['schedule', 'payment', 'mark-paid']);
+const SUPPORTED_OPERATIONS = new Set(['schedule', 'payment', 'mark-paid', 'contract-send']);
 
 function requiredId(value, label) {
   const normalized = String(value ?? '').trim();
@@ -41,6 +41,13 @@ export async function createLeaseIdempotencyKey(operation, lease, options = {}) 
       deposit_amount: stableValue(lease?.deposit_amount),
       deposit_months: stableValue(lease?.deposit_months),
     };
+  } else if (action === 'contract-send') {
+    const version = requiredId(options.version ?? lease?.contract_version, 'Versão do contrato');
+    const documentId = stableValue(options.documentId);
+    if (documentId && !/^[A-Za-z0-9._:-]{1,80}$/.test(documentId)) {
+      throw new TypeError('Identificador do documento inválido para gerar a chave de idempotência.');
+    }
+    payload.contract = { version, document_id: documentId };
   } else {
     const chargeId = requiredId(options.charge?.id, 'Identificador da cobrança');
     const method = String(options.method ?? '').trim().toLowerCase();
