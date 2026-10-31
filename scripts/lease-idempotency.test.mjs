@@ -25,6 +25,14 @@ test('gera chave diferente quando os termos financeiros mudam', async () => {
   assert.notEqual(original, adjusted);
 });
 
+test('gera chave diferente quando a data de início ou o dia de vencimento mudam', async () => {
+  const original = await createLeaseIdempotencyKey('schedule', lease);
+  const movedStart = await createLeaseIdempotencyKey('schedule', { ...lease, starts_on: '2026-12-01' });
+  const changedDueDay = await createLeaseIdempotencyKey('schedule', { ...lease, due_day: 31 });
+  assert.notEqual(original, movedStart);
+  assert.notEqual(original, changedDueDay);
+});
+
 test('isola a chave por operação, cobrança e método de pagamento', async () => {
   const pix = await createLeaseIdempotencyKey('payment', lease, { charge: { id: 7, amount: '1850.00' }, method: 'pix' });
   const boleto = await createLeaseIdempotencyKey('payment', lease, { charge: { id: 7, amount: '1850.00' }, method: 'boleto' });
