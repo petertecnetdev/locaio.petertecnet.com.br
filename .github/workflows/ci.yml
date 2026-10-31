@@ -23,6 +23,10 @@ jobs:
         run: node scripts/architecture-guard.mjs
       - name: Validate production smoke syntax
         run: node --check scripts/production-smoke.mjs
+      - name: Validate critical flow smoke syntax
+        run: node --check scripts/critical-flow-smoke.mjs
+      - name: Testar preflight CORS dos mocks E2E
+        run: npm run test:smoke-cors
       - name: Testar isolamento de sessão HTTP 401
         run: npm run test:session
       - name: Testar origem confiável de downloads autenticados
