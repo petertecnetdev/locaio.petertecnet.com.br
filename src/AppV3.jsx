@@ -159,7 +159,7 @@ function ContractReadiness({ lease, property, documents }) {
 function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
   const [data, setData] = useState(null); const [dataSession, setDataSession] = useState(null);
   const [contract, setContract] = useState(null); const [timeline, setTimeline] = useState([]); const [proposal, setProposal] = useState(null);
-  const actionGuard = useRef(createSingleFlightGuard()); const actionGeneration = useRef(0);
+  const actionGuard = useRef(createSingleFlightGuard()); const uploadGuard = useRef(createSingleFlightGuard()); const actionGeneration = useRef(0);
   const loadSequence = useRef(0); const uploadGeneration = useRef(0);
   const [busy, setBusy] = useState(false); const [uploading, setUploading] = useState(false); const [signer, setSigner] = useState(''); const [amendmentOpen, setAmendmentOpen] = useState(false); const [amendment, setAmendment] = useState({ title: '', label: '', value: '' });
   const load = useCallback(async () => {
@@ -188,6 +188,7 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
       loadSequence.current += 1;
       actionGeneration.current += 1;
       actionGuard.current = createSingleFlightGuard();
+      uploadGuard.current = createSingleFlightGuard();
       uploadGeneration.current += 1;
       setData(null); setDataSession(null); setContract(null); setTimeline([]); setProposal(null);
       setSigner(''); setAmendmentOpen(false); setAmendment({ title: '', label: '', value: '' });
@@ -283,24 +284,36 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
     });
   }, 'Assinatura eletrônica vinculada à versão imutável.');
   const upload = async (event) => {
-    const file = event.target.files?.[0];
+    const input = event.currentTarget;
+    const file = input?.files?.[0];
     if (!file) return;
     const session = getCurrentAuthSession();
-    const generation = ++uploadGeneration.current;
-    setUploading(true);
-    const body = new FormData();
-    body.append('category', 'identity');
-    body.append('file', file);
+    const guard = uploadGuard.current;
+
     try {
-      await appApi.post(`/leases/${id}/documents`, body, { headers: { 'Content-Type': 'multipart/form-data' } });
-      if (!isAuthSessionCurrent(session)) return;
-      notify('Documento enviado.');
-      await load();
-    } catch (error) {
-      if (isAuthSessionCurrent(session)) notify(errorMessage(error), 'error');
+      const result = await guard(async () => {
+        if (!isAuthSessionCurrent(session)) return null;
+        const generation = ++uploadGeneration.current;
+        setUploading(true);
+        const body = new FormData();
+        body.append('category', 'identity');
+        body.append('file', file);
+        try {
+          await appApi.post(`/leases/${id}/documents`, body, { headers: { 'Content-Type': 'multipart/form-data' } });
+          if (!isAuthSessionCurrent(session)) return null;
+          notify('Documento enviado.');
+          await load();
+          return true;
+        } catch (error) {
+          if (isAuthSessionCurrent(session)) notify(errorMessage(error), 'error');
+          return null;
+        } finally {
+          if (generation === uploadGeneration.current) setUploading(false);
+        }
+      });
+      return result.started ? result.value : null;
     } finally {
-      if (generation === uploadGeneration.current) setUploading(false);
-      event.target.value = '';
+      input.value = '';
     }
   };
   const pay = (charge, method) => act(async (session) => {

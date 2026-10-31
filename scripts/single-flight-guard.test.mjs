@@ -30,3 +30,28 @@ test('libera a próxima ação depois de uma falha', async () => {
   await assert.rejects(run(async () => { throw failure; }), (error) => error === failure);
   assert.deepEqual(await run(async () => 'recuperado'), { started: true, value: 'recuperado' });
 });
+
+
+test('impede uploads duplicados sem bloquear ações independentes do contrato', async () => {
+  const uploadGuard = createSingleFlightGuard();
+  const actionGuard = createSingleFlightGuard();
+  let finishUpload;
+  let uploadsStarted = 0;
+
+  const firstUpload = uploadGuard(() => {
+    uploadsStarted += 1;
+    return new Promise((resolve) => { finishUpload = resolve; });
+  });
+  const duplicateUpload = await uploadGuard(async () => {
+    uploadsStarted += 1;
+    return 'duplicado';
+  });
+  const independentAction = await actionGuard(async () => 'ação financeira');
+
+  assert.deepEqual(duplicateUpload, { started: false, value: null });
+  assert.deepEqual(independentAction, { started: true, value: 'ação financeira' });
+  assert.equal(uploadsStarted, 1);
+
+  finishUpload('documento enviado');
+  assert.deepEqual(await firstUpload, { started: true, value: 'documento enviado' });
+});
