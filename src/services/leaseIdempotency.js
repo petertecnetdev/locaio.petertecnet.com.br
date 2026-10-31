@@ -2,7 +2,7 @@ const SUPPORTED_OPERATIONS = new Set(['schedule', 'payment', 'mark-paid']);
 
 function requiredId(value, label) {
   const normalized = String(value ?? '').trim();
-  if (!/^\\d{1,20}$/.test(normalized)) {
+  if (!/^\d{1,20}$/.test(normalized)) {
     throw new TypeError(`${label} inválido para gerar a chave de idempotência.`);
   }
   return normalized;
