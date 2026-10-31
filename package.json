@@ -7,12 +7,13 @@
     "dev": "vite",
     "build": "node scripts/build.mjs",
     "preview": "vite preview",
-    "check": "node scripts/architecture-guard.mjs && node scripts/context-policy-guard.mjs && npm run test:session && npm run test:downloads && npm run test:smoke-cors && npm run test:lease-idempotency && npm run test:payment-profile-session && node scripts/build.mjs",
+    "check": "node scripts/architecture-guard.mjs && node scripts/context-policy-guard.mjs && npm run test:session && npm run test:downloads && npm run test:smoke-cors && npm run test:lease-idempotency && npm run test:payment-profile-session && npm run test:single-flight && node scripts/build.mjs",
     "test:session": "node --test scripts/session-401-guard.test.mjs",
     "test:downloads": "node --test scripts/document-download-guard.test.mjs",
     "test:smoke-cors": "node --test scripts/smoke-cors.test.mjs",
     "test:lease-idempotency": "node --test scripts/lease-idempotency.test.mjs",
-    "test:payment-profile-session": "node --test scripts/payment-profile-session.test.mjs"
+    "test:payment-profile-session": "node --test scripts/payment-profile-session.test.mjs",
+    "test:single-flight": "node --test scripts/single-flight-guard.test.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

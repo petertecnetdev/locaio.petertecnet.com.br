@@ -6,6 +6,7 @@ import {
 } from 'react-icons/fi';
 import api, { appApi, errorMessage, getCurrentAuthSession, isAuthSessionCurrent, logoutSession, storeSession } from './services/api.js';
 import { createLeaseIdempotencyKey } from './services/leaseIdempotency.js';
+import { createSingleFlightGuard } from './services/singleFlightGuard.js';
 import {
   ConfirmDialog, Donut, EmptyState, MetricCard, MiniBars, Modal, PageHeader, Skeleton, StatusBadge,
 } from './components/ui-kit.jsx';
@@ -156,6 +157,7 @@ function ContractReadiness({ lease, property, documents }) {
 
 function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
   const [data, setData] = useState(null); const [contract, setContract] = useState(null); const [timeline, setTimeline] = useState([]); const [proposal, setProposal] = useState(null);
+  const actionGuard = useRef(createSingleFlightGuard());
   const [busy, setBusy] = useState(false); const [uploading, setUploading] = useState(false); const [signer, setSigner] = useState(''); const [amendmentOpen, setAmendmentOpen] = useState(false); const [amendment, setAmendment] = useState({ title: '', label: '', value: '' });
   const load = useCallback(async () => {
     try {
@@ -167,8 +169,37 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
   if (!data) return <div className="pt-page"><Skeleton rows={5} cards /></div>;
   const l = data.lease; const p = data.property; const owner = String(l.landlord_user_id) === String(user?.id); const tenant = !owner; const signatures = contract?.signatures || data.signatures || [];
   const latestVersion = contract?.versions?.[0];
-  const act = async (fn, success) => { setBusy(true); try { const response = await fn(); if (success) notify(success); await load(); await refreshAll(); return response; } catch (error) { notify(errorMessage(error), 'error'); return null; } finally { setBusy(false); } };
-  const generateProposal = async () => { setBusy(true); try { const response = await appApi.post(`/leases/${id}/proposal/generate`); setProposal(response.data?.document || null); notify('Proposta gerada para revisão das condições.'); } catch (error) { notify(errorMessage(error), 'error'); } finally { setBusy(false); } };
+  const runExclusive = async (operation) => {
+    const result = await actionGuard.current(async () => {
+      setBusy(true);
+      try { return await operation(); }
+      finally { setBusy(false); }
+    });
+    return result.started ? result.value : null;
+  };
+  const act = (fn, success) => runExclusive(async () => {
+    try {
+      const response = await fn();
+      if (success) notify(success);
+      await load();
+      await refreshAll();
+      return response;
+    } catch (error) {
+      notify(errorMessage(error), 'error');
+      return null;
+    }
+  });
+  const generateProposal = () => runExclusive(async () => {
+    try {
+      const response = await appApi.post(`/leases/${id}/proposal/generate`);
+      setProposal(response.data?.document || null);
+      notify('Proposta gerada para revisão das condições.');
+      return response;
+    } catch (error) {
+      notify(errorMessage(error), 'error');
+      return null;
+    }
+  });
   const generate = () => act(() => appApi.post(`/leases/${id}/contract/generate`), contract ? 'Nova versão do contrato criada sem apagar o histórico anterior.' : 'Contrato gerado com snapshot dos dados da locação.');
   const send = () => act(async () => {
     const idempotencyKey = await createLeaseIdempotencyKey('contract-send', l, {
@@ -220,7 +251,7 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
       </section>
       {contract && <section className="pt-card"><header><div><h2>Histórico e versões</h2><p>Registro cronológico das ações e versões do documento.</p></div></header><div className="version-list">{contract.versions?.map((version) => <div key={version.id}><span className={version.is_locked ? 'locked' : ''}>v{version.version}</span><div><b>{statusLabel[version.status] || version.status}</b><small>{dateTime(version.created_at)} · hash {version.content_hash?.slice(0, 12)}…</small></div></div>)}</div><div className="audit-timeline">{timeline.length ? timeline.map((event) => <div key={event.id}><span /><div><b>{event.description || event.event_type}</b><small>{dateTime(event.occurred_at)} · {event.event_type}</small></div></div>) : <small>Nenhum evento de auditoria registrado ainda.</small>}</div></section>}
       <section className="pt-card"><header><div><h2>Documentos de apoio</h2><p>Identificação, comprovantes, vistorias e demais arquivos do processo.</p></div><label className="pt-button secondary"><FiUpload /> {uploading ? 'Enviando…' : 'Enviar documento'}<input hidden type="file" accept="image/*,.pdf" onChange={upload} disabled={uploading} /></label></header>{data.documents?.length ? <div className="pt-list">{data.documents.map((d) => <a className="pt-list-row" key={d.id} href={`${import.meta.env.VITE_API_URL || 'https://api.petertecnet.com.br/api'}/v1/apps/locaio/leases/${id}/documents/${d.id}`} target="_blank" rel="noreferrer"><span className="pt-round-icon"><FiFileText /></span><div><b>{d.name}</b><small>{d.category} · {(Number(d.size || 0) / 1024).toFixed(0)} KB</small></div><FiDownload /></a>)}</div> : <EmptyState icon={FiUpload} title="Nenhum documento" description={tenant ? 'Envie seus documentos para o proprietário concluir o contrato.' : 'Anexe os documentos que sustentam esta locação.'} />}</section>
-      <section className="pt-card"><header><div><h2>Cobranças</h2><p>Aluguel, caução e demais obrigações financeiras.</p></div>{owner && <button className="pt-button secondary" onClick={schedule} disabled={busy}><FiCalendar /> Gerar cronograma</button>}</header>{data.charges?.length ? <div className="pt-charge-list">{data.charges.map((c) => <article className="pt-charge" key={c.id}><div><StatusBadge status={c.status}>{statusLabel[c.status] || c.status}</StatusBadge><h3>{c.description}</h3><p>Vencimento {date(c.due_date)}</p></div><strong>{money(c.amount)}</strong><div className="pt-charge-actions">{c.status !== 'paid' && <><button onClick={() => pay(c, 'pix')}>Pix</button><button onClick={() => pay(c, 'boleto')}>Boleto</button><button onClick={() => pay(c, 'card')}>Cartão</button>{owner && <button className="received" onClick={() => markPaid(c)}>Marcar recebido</button>}</>}{c.status === 'paid' && <span className="paid"><FiCheck /> Pago</span>}</div></article>)}</div> : <EmptyState icon={FiCreditCard} title="Sem cobranças" description="Gere o cronograma para criar aluguel e caução automaticamente." />}</section>
+      <section className="pt-card"><header><div><h2>Cobranças</h2><p>Aluguel, caução e demais obrigações financeiras.</p></div>{owner && <button className="pt-button secondary" onClick={schedule} disabled={busy}><FiCalendar /> Gerar cronograma</button>}</header>{data.charges?.length ? <div className="pt-charge-list">{data.charges.map((c) => <article className="pt-charge" key={c.id}><div><StatusBadge status={c.status}>{statusLabel[c.status] || c.status}</StatusBadge><h3>{c.description}</h3><p>Vencimento {date(c.due_date)}</p></div><strong>{money(c.amount)}</strong><div className="pt-charge-actions">{c.status !== 'paid' && <><button onClick={() => pay(c, 'pix')} disabled={busy}>Pix</button><button onClick={() => pay(c, 'boleto')} disabled={busy}>Boleto</button><button onClick={() => pay(c, 'card')} disabled={busy}>Cartão</button>{owner && <button className="received" onClick={() => markPaid(c)} disabled={busy}>Marcar recebido</button>}</>}{c.status === 'paid' && <span className="paid"><FiCheck /> Pago</span>}</div></article>)}</div> : <EmptyState icon={FiCreditCard} title="Sem cobranças" description="Gere o cronograma para criar aluguel e caução automaticamente." />}</section>
     </main><aside><section className="pt-card sticky"><h3>Condições da locação</h3><dl><div><dt>Finalidade</dt><dd>{l.purpose === 'commercial' ? 'Comercial' : l.purpose === 'mixed' ? 'Mista' : 'Residencial'}</dd></div><div><dt>Status da vigência</dt><dd>{leaseVigency(l).label}</dd></div><div><dt>Vencimento</dt><dd>Dia {l.due_day}</dd></div><div><dt>Reajuste</dt><dd>{l.adjustment_index || 'A definir'} / {l.adjustment_frequency_months || 12} meses</dd></div><div><dt>Garantia</dt><dd>{l.guarantee_type === 'deposit' ? `Caução ${money(l.deposit_amount)}` : 'Sem caução'}</dd></div></dl><hr /><h4>Incluso no aluguel</h4><div className="pt-chips">{(l.included_expenses || []).length ? l.included_expenses.map((x) => <span key={x}>{expenseOptions.find((o) => o[0] === x)?.[1] || x}</span>) : <small>Nenhuma despesa marcada como inclusa.</small>}</div><h4>Responsabilidade do inquilino</h4><div className="pt-chips">{(l.tenant_expenses || []).map((x) => <span key={x}>{expenseOptions.find((o) => o[0] === x)?.[1] || x}</span>)}</div></section></aside></div>
     <Modal open={amendmentOpen} title="Criar aditivo" eyebrow="Contrato assinado" onClose={() => setAmendmentOpen(false)}><div className="pt-form"><p>O contrato original permanece imutável. O aditivo será um novo documento vinculado a ele.</p><label>Título<input value={amendment.title} onChange={(e) => setAmendment({ ...amendment, title: e.target.value })} placeholder="Ex.: Aditivo de reajuste" /></label><label>O que será alterado?<input value={amendment.label} onChange={(e) => setAmendment({ ...amendment, label: e.target.value })} placeholder="Ex.: Valor do aluguel" /></label><label>Nova condição<textarea rows="4" value={amendment.value} onChange={(e) => setAmendment({ ...amendment, value: e.target.value })} /></label><div className="pt-modal-actions"><button className="pt-button secondary" onClick={() => setAmendmentOpen(false)}>Cancelar</button><button className="pt-button primary" disabled={busy || !amendment.title || !amendment.label || !amendment.value} onClick={saveAmendment}>Criar aditivo</button></div></div></Modal>
   </div>;
