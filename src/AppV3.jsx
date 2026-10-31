@@ -181,7 +181,19 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
     const idempotencyKey = await createLeaseIdempotencyKey('schedule', l);
     return appApi.post(`/leases/${id}/charges/schedule`, {}, { headers: { 'Idempotency-Key': idempotencyKey } });
   }, 'Cronograma financeiro atualizado.');
-  const sign = () => act(() => appApi.post(`/leases/${id}/contract/sign`, { party: owner ? 'landlord' : 'tenant', signer_name: signer || (owner ? (user?.name || user?.first_name || 'Locador') : l.tenant_name), accepted: true }), 'Assinatura eletrônica vinculada à versão imutável.');
+  const sign = () => act(async () => {
+    const party = owner ? 'landlord' : 'tenant';
+    const signerName = String(signer || (owner ? (user?.name || user?.first_name || 'Locador') : l.tenant_name) || '').trim();
+    const idempotencyKey = await createLeaseIdempotencyKey('contract-sign', l, {
+      version: latestVersion?.version ?? contract?.current_version ?? l.contract_version,
+      documentId: contract?.public_id,
+      party,
+      signerName,
+    });
+    return appApi.post(`/leases/${id}/contract/sign`, { party, signer_name: signerName, accepted: true }, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    });
+  }, 'Assinatura eletrônica vinculada à versão imutável.');
   const upload = async (event) => { const file = event.target.files?.[0]; if (!file) return; setUploading(true); const body = new FormData(); body.append('category', 'identity'); body.append('file', file); try { await appApi.post(`/leases/${id}/documents`, body, { headers: { 'Content-Type': 'multipart/form-data' } }); notify('Documento enviado.'); await load(); } catch (error) { notify(errorMessage(error), 'error'); } finally { setUploading(false); event.target.value = ''; } };
   const pay = (charge, method) => act(async () => {
     const idempotencyKey = await createLeaseIdempotencyKey('payment', l, { charge, method });

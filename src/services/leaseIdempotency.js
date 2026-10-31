@@ -1,4 +1,4 @@
-const SUPPORTED_OPERATIONS = new Set(['schedule', 'payment', 'mark-paid', 'contract-send']);
+const SUPPORTED_OPERATIONS = new Set(['schedule', 'payment', 'mark-paid', 'contract-send', 'contract-sign']);
 
 function requiredId(value, label) {
   const normalized = String(value ?? '').trim();
@@ -14,14 +14,14 @@ function stableValue(value) {
 }
 
 /**
- * Produz uma chave estável por operação financeira e estado contratual.
+ * Produz uma chave estável por operação crítica e estado contratual.
  * O backend escopa a chave por aplicação e usuário e valida o fingerprint
  * completo da requisição antes de reproduzir uma resposta anterior.
  */
 export async function createLeaseIdempotencyKey(operation, lease, options = {}) {
   const action = String(operation ?? '').trim().toLowerCase();
   if (!SUPPORTED_OPERATIONS.has(action)) {
-    throw new TypeError('Operação financeira não suportada para idempotência.');
+    throw new TypeError('Operação não suportada para idempotência.');
   }
 
   const leaseId = requiredId(lease?.id, 'Identificador da locação');
@@ -41,13 +41,24 @@ export async function createLeaseIdempotencyKey(operation, lease, options = {}) 
       deposit_amount: stableValue(lease?.deposit_amount),
       deposit_months: stableValue(lease?.deposit_months),
     };
-  } else if (action === 'contract-send') {
+  } else if (action === 'contract-send' || action === 'contract-sign') {
     const version = requiredId(options.version ?? lease?.contract_version, 'Versão do contrato');
     const documentId = stableValue(options.documentId);
     if (documentId && !/^[A-Za-z0-9._:-]{1,80}$/.test(documentId)) {
       throw new TypeError('Identificador do documento inválido para gerar a chave de idempotência.');
     }
     payload.contract = { version, document_id: documentId };
+    if (action === 'contract-sign') {
+      const party = String(options.party ?? '').trim().toLowerCase();
+      if (!['landlord', 'tenant'].includes(party)) {
+        throw new TypeError('Parte inválida para gerar a chave de assinatura.');
+      }
+      const signerName = String(options.signerName ?? '').trim();
+      if (!signerName || signerName.length > 190) {
+        throw new TypeError('Nome do signatário inválido para gerar a chave de assinatura.');
+      }
+      payload.signature = { party, signer_name: signerName };
+    }
   } else {
     const chargeId = requiredId(options.charge?.id, 'Identificador da cobrança');
     const method = String(options.method ?? '').trim().toLowerCase();

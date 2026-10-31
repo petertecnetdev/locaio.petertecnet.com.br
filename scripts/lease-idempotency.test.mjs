@@ -74,3 +74,39 @@ test('rejeita versão ou identificador de documento inválidos no envio', async 
   await assert.rejects(() => createLeaseIdempotencyKey('contract-send', lease, { version: 3, documentId: '../outside' }), TypeError);
 });
 
+
+test('reutiliza a chave da mesma assinatura na mesma versão', async () => {
+  const options = { version: 3, documentId: 'contract-uuid-42', party: 'landlord', signerName: 'Maria da Silva' };
+  const first = await createLeaseIdempotencyKey('contract-sign', lease, options);
+  const retry = await createLeaseIdempotencyKey('contract-sign', lease, { ...options });
+  assert.equal(first, retry);
+  assert.match(first, /^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$/);
+});
+
+test('isola assinatura por parte, versão, documento e signatário', async () => {
+  const original = await createLeaseIdempotencyKey('contract-sign', lease, {
+    version: 3, documentId: 'contract-uuid-42', party: 'landlord', signerName: 'Maria da Silva',
+  });
+  const tenant = await createLeaseIdempotencyKey('contract-sign', lease, {
+    version: 3, documentId: 'contract-uuid-42', party: 'tenant', signerName: 'João da Silva',
+  });
+  const nextVersion = await createLeaseIdempotencyKey('contract-sign', lease, {
+    version: 4, documentId: 'contract-uuid-42', party: 'landlord', signerName: 'Maria da Silva',
+  });
+  const renamedSigner = await createLeaseIdempotencyKey('contract-sign', lease, {
+    version: 3, documentId: 'contract-uuid-42', party: 'landlord', signerName: 'Maria Souza',
+  });
+  assert.equal(new Set([original, tenant, nextVersion, renamedSigner]).size, 4);
+});
+
+test('rejeita parte ou nome inválido antes da assinatura', async () => {
+  await assert.rejects(() => createLeaseIdempotencyKey('contract-sign', lease, {
+    version: 3, party: 'guarantor', signerName: 'Maria da Silva',
+  }), TypeError);
+  await assert.rejects(() => createLeaseIdempotencyKey('contract-sign', lease, {
+    version: 3, party: 'tenant', signerName: '   ',
+  }), TypeError);
+  await assert.rejects(() => createLeaseIdempotencyKey('contract-sign', lease, {
+    version: 3, party: 'tenant', signerName: 'a'.repeat(191),
+  }), TypeError);
+});
