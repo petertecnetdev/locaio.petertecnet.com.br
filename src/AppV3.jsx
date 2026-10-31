@@ -5,6 +5,7 @@ import {
   FiMapPin, FiPlus, FiRefreshCw, FiSend, FiShield, FiTrash2, FiUpload, FiUser,
 } from 'react-icons/fi';
 import api, { appApi, errorMessage, getCurrentAuthSession, isAuthSessionCurrent, logoutSession, storeSession } from './services/api.js';
+import { createLeaseIdempotencyKey } from './services/leaseIdempotency.js';
 import {
   ConfirmDialog, Donut, EmptyState, MetricCard, MiniBars, Modal, PageHeader, Skeleton, StatusBadge,
 } from './components/ui-kit.jsx';
@@ -170,11 +171,21 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
   const generateProposal = async () => { setBusy(true); try { const response = await appApi.post(`/leases/${id}/proposal/generate`); setProposal(response.data?.document || null); notify('Proposta gerada para revisão das condições.'); } catch (error) { notify(errorMessage(error), 'error'); } finally { setBusy(false); } };
   const generate = () => act(() => appApi.post(`/leases/${id}/contract/generate`), contract ? 'Nova versão do contrato criada sem apagar o histórico anterior.' : 'Contrato gerado com snapshot dos dados da locação.');
   const send = () => act(() => appApi.post(`/leases/${id}/contract/send`), 'Versão bloqueada e enviada ao inquilino para assinatura.');
-  const schedule = () => act(() => appApi.post(`/leases/${id}/charges/schedule`), 'Cronograma financeiro atualizado.');
+  const schedule = () => act(async () => {
+    const idempotencyKey = await createLeaseIdempotencyKey('schedule', l);
+    return appApi.post(`/leases/${id}/charges/schedule`, {}, { headers: { 'Idempotency-Key': idempotencyKey } });
+  }, 'Cronograma financeiro atualizado.');
   const sign = () => act(() => appApi.post(`/leases/${id}/contract/sign`, { party: owner ? 'landlord' : 'tenant', signer_name: signer || (owner ? (user?.name || user?.first_name || 'Locador') : l.tenant_name), accepted: true }), 'Assinatura eletrônica vinculada à versão imutável.');
   const upload = async (event) => { const file = event.target.files?.[0]; if (!file) return; setUploading(true); const body = new FormData(); body.append('category', 'identity'); body.append('file', file); try { await appApi.post(`/leases/${id}/documents`, body, { headers: { 'Content-Type': 'multipart/form-data' } }); notify('Documento enviado.'); await load(); } catch (error) { notify(errorMessage(error), 'error'); } finally { setUploading(false); event.target.value = ''; } };
-  const pay = (charge, method) => act(() => appApi.post(`/leases/${id}/charges/${charge.id}/payment`, { method }), `Cobrança preparada para ${method === 'pix' ? 'Pix' : method === 'boleto' ? 'boleto' : 'cartão'}.`);
-  const markPaid = (charge) => act(() => appApi.patch(`/leases/${id}/charges/${charge.id}/paid`, { payment_method: charge.payment_method || 'transfer' }), 'Pagamento marcado como recebido.');
+  const pay = (charge, method) => act(async () => {
+    const idempotencyKey = await createLeaseIdempotencyKey('payment', l, { charge, method });
+    return appApi.post(`/leases/${id}/charges/${charge.id}/payment`, { method }, { headers: { 'Idempotency-Key': idempotencyKey } });
+  }, `Cobrança preparada para ${method === 'pix' ? 'Pix' : method === 'boleto' ? 'boleto' : 'cartão'}.`);
+  const markPaid = (charge) => act(async () => {
+    const paymentMethod = charge.payment_method || 'transfer';
+    const idempotencyKey = await createLeaseIdempotencyKey('mark-paid', l, { charge, method: paymentMethod });
+    return appApi.patch(`/leases/${id}/charges/${charge.id}/paid`, { payment_method: paymentMethod }, { headers: { 'Idempotency-Key': idempotencyKey } });
+  }, 'Pagamento marcado como recebido.');
   const saveAmendment = async () => { if (!amendment.title.trim() || !amendment.label.trim() || !amendment.value.trim()) return; const response = await act(() => appApi.post(`/leases/${id}/contract/amendments`, { title: amendment.title.trim(), changes: [{ label: amendment.label.trim(), value: amendment.value.trim() }] }), 'Aditivo criado e vinculado ao contrato original.'); if (response) { setAmendmentOpen(false); setAmendment({ title: '', label: '', value: '' }); } };
   const documentStatus = contract?.status || (l.contract_text ? 'review' : 'draft');
   const content = latestVersion?.content || l.contract_text;
