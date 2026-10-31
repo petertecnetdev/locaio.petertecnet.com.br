@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FiCheck, FiCreditCard, FiEdit3, FiKey, FiRefreshCw, FiShield, FiX } from 'react-icons/fi';
-import { appApi, errorMessage } from '../services/api.js';
+import { appApi, CONTEXT_STORAGE_KEY, errorMessage, getCurrentAuthSession } from '../services/api.js';
+import { shouldApplyPaymentProfileResult } from '../services/paymentProfileSessionGuard.js';
 import '../payment-receiving-center.css';
 
 const keyTypes = [
@@ -15,46 +16,84 @@ const userFromStorage = () => {
   try { return JSON.parse(localStorage.getItem('user') || 'null'); } catch { return null; }
 };
 
+const createPaymentProfileForm = (profile = null) => {
+  const user = userFromStorage();
+  return {
+    pix_key_type: profile?.pix_key_type || 'cpf',
+    pix_key: '',
+    holder_name: profile?.holder_name || [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.name || '',
+    merchant_city: profile?.merchant_city || '',
+  };
+};
+
 export default function PaymentReceivingCenter() {
   const [state, setState] = useState({ loading: true, canReceive: false, profile: null });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
-  const user = userFromStorage();
-  const [form, setForm] = useState({
-    pix_key_type: 'cpf',
-    pix_key: '',
-    holder_name: [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.name || '',
-    merchant_city: '',
-  });
+  const requestSequence = useRef(0);
+  const [form, setForm] = useState(() => createPaymentProfileForm());
+
+  const isCurrentRequest = useCallback((requestId, session) => shouldApplyPaymentProfileResult(
+    requestId,
+    requestSequence.current,
+    session,
+    getCurrentAuthSession(),
+  ), []);
 
   const load = useCallback(async () => {
-    if (!localStorage.getItem('token')) {
+    const requestId = ++requestSequence.current;
+    const session = getCurrentAuthSession();
+
+    setNotice(null);
+    setBusy(false);
+    setOpen(false);
+    setEditing(false);
+
+    if (!session.token) {
       setState({ loading: false, canReceive: false, profile: null });
+      setForm(createPaymentProfileForm());
       return;
     }
+
+    // Não exibe o perfil anterior enquanto a nova sessão é consultada.
+    setState({ loading: true, canReceive: false, profile: null });
+    setForm(createPaymentProfileForm());
+
     try {
       const { data } = await appApi.get('/leasing/payment-profile');
-      setState({ loading: false, canReceive: Boolean(data?.can_receive), profile: data?.profile || null });
-      if (data?.profile) {
-        setForm((current) => ({
-          ...current,
-          pix_key_type: data.profile.pix_key_type || current.pix_key_type,
-          pix_key: '',
-          holder_name: data.profile.holder_name || current.holder_name,
-          merchant_city: data.profile.merchant_city || current.merchant_city,
-        }));
-      }
+      if (!isCurrentRequest(requestId, session)) return;
+
+      const profile = data?.profile || null;
+      setState({ loading: true, canReceive: Boolean(data?.can_receive), profile });
+      setForm(createPaymentProfileForm(profile));
     } catch {
-      setState((current) => ({ ...current, loading: false }));
+      if (!isCurrentRequest(requestId, session)) return;
+      setState({ loading: true, canReceive: false, profile: null });
+      setForm(createPaymentProfileForm());
+    } finally {
+      if (isCurrentRequest(requestId, session)) {
+        setState((current) => ({ ...current, loading: false }));
+      }
     }
-  }, []);
+  }, [isCurrentRequest]);
 
   useEffect(() => {
     load();
+    const storageChanged = (event) => {
+      if (event.key !== null && !['token', 'user', CONTEXT_STORAGE_KEY].includes(event.key)) return;
+      load();
+    };
     window.addEventListener('authChanged', load);
-    return () => window.removeEventListener('authChanged', load);
+    window.addEventListener('peterContextChanged', load);
+    window.addEventListener('storage', storageChanged);
+    return () => {
+      requestSequence.current += 1;
+      window.removeEventListener('authChanged', load);
+      window.removeEventListener('peterContextChanged', load);
+      window.removeEventListener('storage', storageChanged);
+    };
   }, [load]);
 
   const notify = (message, type = 'success') => {
@@ -64,6 +103,13 @@ export default function PaymentReceivingCenter() {
 
   const save = async (event) => {
     event.preventDefault();
+    const requestId = ++requestSequence.current;
+    const session = getCurrentAuthSession();
+    if (!session.token) {
+      setBusy(false);
+      return;
+    }
+
     setBusy(true);
     try {
       const { data } = await appApi.put('/leasing/payment-profile/pix', {
@@ -72,14 +118,17 @@ export default function PaymentReceivingCenter() {
         holder_name: form.holder_name.trim(),
         merchant_city: form.merchant_city.trim(),
       });
+      if (!isCurrentRequest(requestId, session)) return;
+
       setState((current) => ({ ...current, profile: data?.profile || current.profile }));
       setForm((current) => ({ ...current, pix_key: '' }));
       setEditing(false);
       notify('Chave PIX salva. Os próximos pagamentos poderão ser enviados diretamente para você.');
     } catch (requestError) {
+      if (!isCurrentRequest(requestId, session)) return;
       notify(errorMessage(requestError, 'Não foi possível salvar a chave PIX.'), 'error');
     } finally {
-      setBusy(false);
+      if (isCurrentRequest(requestId, session)) setBusy(false);
     }
   };
 
