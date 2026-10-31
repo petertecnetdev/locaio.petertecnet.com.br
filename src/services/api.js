@@ -1,11 +1,12 @@
 import axios from 'axios';
-import { isCurrentAuthSession, resolveRequestAuthSession, shouldInvalidateSessionForUnauthorized } from './session401Guard.js';
+import { isAuthSessionStorageEvent, isCurrentAuthSession, resolveRequestAuthSession, shouldInvalidateSessionForUnauthorized } from './session401Guard.js';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.petertecnet.com.br/api';
 export const APP_SLUG = import.meta.env.VITE_APP_SLUG || 'locaio';
 export const CONTEXT_STORAGE_KEY = `peter_context_role:${APP_SLUG}`;
 
 const SESSION_STORAGE_KEYS = ['token', 'access_token', 'auth_token', 'user'];
+const AUTH_STORAGE_KEYS = ['token', 'access_token', 'auth_token'];
 const DEFAULT_READ_CACHE_TTL_MS = 2500;
 const readCache = new Map();
 const inFlightReads = new Map();
@@ -46,6 +47,21 @@ export function withAuthSession(session, config = {}) {
 export function clearAppReadCache() {
   cacheGeneration += 1;
   readCache.clear();
+}
+
+/**
+ * O evento "storage" só chega às outras abas. Avançar a geração local evita
+ * aceitar respostas antigas mesmo no ciclo A→B→A com o mesmo token e papel.
+ */
+function synchronizeAuthSessionFromStorage(event) {
+  if (event?.storageArea && event.storageArea !== localStorage) return;
+  if (!isAuthSessionStorageEvent(event, AUTH_STORAGE_KEYS, CONTEXT_STORAGE_KEY)) return;
+  sessionEpoch += 1;
+  clearAppReadCache();
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', synchronizeAuthSessionFromStorage);
 }
 
 export function appMutationPolicy(role, method, path) {

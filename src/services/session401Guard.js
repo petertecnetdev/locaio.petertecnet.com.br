@@ -50,3 +50,11 @@ export function shouldInvalidateSessionForUnauthorized(error, currentSession) {
 
   return isCurrentAuthSession(request.__locaioAuthSnapshot, currentSession);
 }
+
+
+/** Identifica eventos localStorage que alteram a identidade ou o contexto da sessão. */
+export function isAuthSessionStorageEvent(event, authStorageKeys, contextStorageKey) {
+  if (!event || typeof event !== 'object') return false;
+  if (event.key === null) return true;
+  return authStorageKeys.includes(event.key) || event.key === contextStorageKey;
+}

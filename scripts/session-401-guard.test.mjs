@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isCurrentAuthSession, resolveRequestAuthSession, shouldApplyLatestSessionResponse, shouldInvalidateSessionForUnauthorized } from '../src/services/session401Guard.js';
+import { isAuthSessionStorageEvent, isCurrentAuthSession, resolveRequestAuthSession, shouldApplyLatestSessionResponse, shouldInvalidateSessionForUnauthorized } from '../src/services/session401Guard.js';
 
 const current = { token: 'token-B', role: 'landlord', epoch: 2 };
 const unauthorized = (snapshot, url = '/v1/apps/locaio/properties', status = 401) => ({
@@ -107,4 +107,37 @@ test('preserva chamadas públicas quando ambas as sessões estão anônimas e ig
 test('bloqueia chamada pública antiga quando uma sessão autenticada começa', () => {
   const anonymous = { token: null, role: null, epoch: 0 };
   assert.equal(resolveRequestAuthSession(anonymous, current), null);
+});
+
+
+const authStorageKeys = ['token', 'access_token', 'auth_token'];
+const contextStorageKey = 'peter_context_role:locaio';
+
+test('sincroniza alterações do token principal e aliases entre abas', () => {
+  for (const key of authStorageKeys) {
+    assert.equal(isAuthSessionStorageEvent({ key }, authStorageKeys, contextStorageKey), true);
+  }
+});
+
+test('sincroniza alterações de contexto entre abas', () => {
+  assert.equal(isAuthSessionStorageEvent({ key: contextStorageKey }, authStorageKeys, contextStorageKey), true);
+});
+
+test('trata localStorage.clear como alteração de sessão', () => {
+  assert.equal(isAuthSessionStorageEvent({ key: null }, authStorageKeys, contextStorageKey), true);
+});
+
+test('ignora alterações de perfil que não mudam a identidade da sessão', () => {
+  assert.equal(isAuthSessionStorageEvent({ key: 'user' }, authStorageKeys, contextStorageKey), false);
+});
+
+test('ignora chaves sem relação com autenticação ou contexto', () => {
+  assert.equal(isAuthSessionStorageEvent({ key: 'theme' }, authStorageKeys, contextStorageKey), false);
+  assert.equal(isAuthSessionStorageEvent({ key: 'cart' }, authStorageKeys, contextStorageKey), false);
+});
+
+test('ignora eventos de armazenamento inválidos', () => {
+  assert.equal(isAuthSessionStorageEvent(null, authStorageKeys, contextStorageKey), false);
+  assert.equal(isAuthSessionStorageEvent({}, authStorageKeys, contextStorageKey), false);
+  assert.equal(isAuthSessionStorageEvent({ key: undefined }, authStorageKeys, contextStorageKey), false);
 });
