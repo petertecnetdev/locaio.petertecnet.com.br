@@ -17,18 +17,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: package.json
-      - run: npm install --no-audit --no-fund
-      - name: Validate frontend architecture
-        run: node scripts/architecture-guard.mjs
-      - name: Validate production smoke syntax
+          cache-dependency-path: package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Validar sintaxe do smoke de produção
         run: node --check scripts/production-smoke.mjs
-      - name: Validate critical flow smoke syntax
+      - name: Validar sintaxe do fluxo crítico de locação
         run: node --check scripts/critical-flow-smoke.mjs
-      - name: Testar preflight CORS dos mocks E2E
-        run: npm run test:smoke-cors
-      - name: Testar isolamento de sessão HTTP 401
-        run: npm run test:session
-      - name: Testar origem confiável de downloads autenticados
-        run: npm run test:downloads
-      - run: npm run build
+      - name: Executar verificações completas da aplicação
+        run: npm run check
