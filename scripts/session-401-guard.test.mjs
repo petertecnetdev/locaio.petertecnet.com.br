@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isCurrentAuthSession, shouldInvalidateSessionForUnauthorized } from '../src/services/session401Guard.js';
+import { isCurrentAuthSession, shouldApplyLatestSessionResponse, shouldInvalidateSessionForUnauthorized } from '../src/services/session401Guard.js';
 
 const current = { token: 'token-B', role: 'landlord', epoch: 2 };
 const unauthorized = (snapshot, url = '/v1/apps/locaio/properties', status = 401) => ({
@@ -57,4 +57,23 @@ test('revogação tardia de logout nunca encerra novo login', () => {
 test('respostas sem credenciais não são atribuídas à sessão atual', () => {
   assert.equal(isCurrentAuthSession({ token: null, role: 'landlord', epoch: 2 }, current), false);
   assert.equal(isCurrentAuthSession(current, { token: null, role: 'landlord', epoch: 2 }), false);
+});
+
+
+test('aplica somente a resposta mais recente da sessão que iniciou a leitura', () => {
+  assert.equal(shouldApplyLatestSessionResponse(3, 3, current, current), true);
+  assert.equal(shouldApplyLatestSessionResponse(2, 3, current, current), false);
+});
+
+test('descarta respostas após troca de conta, contexto ou geração da sessão', () => {
+  assert.equal(shouldApplyLatestSessionResponse(3, 3, { ...current, token: 'token-A' }, current), false);
+  assert.equal(shouldApplyLatestSessionResponse(3, 3, { ...current, role: 'tenant' }, current), false);
+  assert.equal(shouldApplyLatestSessionResponse(3, 3, { ...current, epoch: 1 }, current), false);
+});
+
+test('rejeita identificadores de leitura inválidos ou sem sessão', () => {
+  assert.equal(shouldApplyLatestSessionResponse(0, 0, current, current), false);
+  assert.equal(shouldApplyLatestSessionResponse(Number.NaN, 3, current, current), false);
+  assert.equal(shouldApplyLatestSessionResponse(3, 3, { ...current, token: null }, current), false);
+  assert.equal(shouldApplyLatestSessionResponse(3, 3, current, { ...current, token: null }), false);
 });

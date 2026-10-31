@@ -13,6 +13,14 @@ export function isCurrentAuthSession(started, current) {
   );
 }
 
+/** Só aplica respostas da última leitura iniciada na mesma sessão autenticada. */
+export function shouldApplyLatestSessionResponse(requestId, latestRequestId, startedSession, currentSession) {
+  return Number.isSafeInteger(requestId)
+    && requestId > 0
+    && requestId === latestRequestId
+    && isCurrentAuthSession(startedSession, currentSession);
+}
+
 export function shouldInvalidateSessionForUnauthorized(error, currentSession) {
   if (error?.response?.status !== 401) return false;
 

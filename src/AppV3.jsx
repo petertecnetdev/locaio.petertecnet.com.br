@@ -4,8 +4,9 @@ import {
   FiDollarSign, FiDownload, FiEye, FiEyeOff, FiFileText, FiHome, FiKey, FiLogOut, FiMail,
   FiMapPin, FiPlus, FiRefreshCw, FiSend, FiShield, FiTrash2, FiUpload, FiUser,
 } from 'react-icons/fi';
-import api, { appApi, errorMessage, getCurrentAuthSession, isAuthSessionCurrent, logoutSession, storeSession } from './services/api.js';
+import api, { CONTEXT_STORAGE_KEY, appApi, errorMessage, getCurrentAuthSession, isAuthSessionCurrent, logoutSession, storeSession } from './services/api.js';
 import { createLeaseIdempotencyKey } from './services/leaseIdempotency.js';
+import { shouldApplyLatestSessionResponse } from './services/session401Guard.js';
 import { createSingleFlightGuard } from './services/singleFlightGuard.js';
 import {
   ConfirmDialog, Donut, EmptyState, MetricCard, MiniBars, Modal, PageHeader, Skeleton, StatusBadge,
@@ -156,63 +157,118 @@ function ContractReadiness({ lease, property, documents }) {
 }
 
 function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
-  const [data, setData] = useState(null); const [contract, setContract] = useState(null); const [timeline, setTimeline] = useState([]); const [proposal, setProposal] = useState(null);
-  const actionGuard = useRef(createSingleFlightGuard());
+  const [data, setData] = useState(null); const [dataSession, setDataSession] = useState(null);
+  const [contract, setContract] = useState(null); const [timeline, setTimeline] = useState([]); const [proposal, setProposal] = useState(null);
+  const actionGuard = useRef(createSingleFlightGuard()); const actionGeneration = useRef(0);
+  const loadSequence = useRef(0); const uploadGeneration = useRef(0);
   const [busy, setBusy] = useState(false); const [uploading, setUploading] = useState(false); const [signer, setSigner] = useState(''); const [amendmentOpen, setAmendmentOpen] = useState(false); const [amendment, setAmendment] = useState({ title: '', label: '', value: '' });
   const load = useCallback(async () => {
+    const requestId = ++loadSequence.current;
+    const session = getCurrentAuthSession();
+    if (!session.token) {
+      if (requestId === loadSequence.current) {
+        setData(null); setDataSession(null); setContract(null); setTimeline([]);
+      }
+      return;
+    }
+
     try {
       const [leaseResponse, contractResponse] = await Promise.all([appApi.get(`/leases/${id}`), appApi.get(`/leases/${id}/contract`).catch(() => ({ data: { document: null, timeline: [] } }))]);
-      setData(leaseResponse.data); setContract(contractResponse.data?.document || null); setTimeline(contractResponse.data?.timeline || []);
-    } catch (error) { notify(errorMessage(error), 'error'); }
+      if (!shouldApplyLatestSessionResponse(requestId, loadSequence.current, session, getCurrentAuthSession())) return;
+      setData(leaseResponse.data); setDataSession(session);
+      setContract(contractResponse.data?.document || null); setTimeline(contractResponse.data?.timeline || []);
+    } catch (error) {
+      if (shouldApplyLatestSessionResponse(requestId, loadSequence.current, session, getCurrentAuthSession())) {
+        notify(errorMessage(error), 'error');
+      }
+    }
   }, [id, notify]);
-  useEffect(() => { load(); }, [load]);
-  if (!data) return <div className="pt-page"><Skeleton rows={5} cards /></div>;
+  useEffect(() => {
+    const resetForSessionChange = () => {
+      loadSequence.current += 1;
+      actionGeneration.current += 1;
+      actionGuard.current = createSingleFlightGuard();
+      uploadGeneration.current += 1;
+      setData(null); setDataSession(null); setContract(null); setTimeline([]); setProposal(null);
+      setSigner(''); setAmendmentOpen(false); setAmendment({ title: '', label: '', value: '' });
+      setBusy(false); setUploading(false);
+      void load();
+    };
+    const handleStorage = (event) => {
+      if (event.key === null || event.key === 'token' || event.key === CONTEXT_STORAGE_KEY) resetForSessionChange();
+    };
+
+    setData(null); setDataSession(null); setContract(null); setTimeline([]); setProposal(null);
+    void load();
+    window.addEventListener('authChanged', resetForSessionChange);
+    window.addEventListener('peterContextChanged', resetForSessionChange);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      loadSequence.current += 1;
+      window.removeEventListener('authChanged', resetForSessionChange);
+      window.removeEventListener('peterContextChanged', resetForSessionChange);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [id, load]);
+  if (!data || !isAuthSessionCurrent(dataSession)) return <div className="pt-page"><Skeleton rows={5} cards /></div>;
   const l = data.lease; const p = data.property; const owner = String(l.landlord_user_id) === String(user?.id); const tenant = !owner; const signatures = contract?.signatures || data.signatures || [];
   const latestVersion = contract?.versions?.[0];
   const runExclusive = async (operation) => {
-    const result = await actionGuard.current(async () => {
+    const generation = actionGeneration.current;
+    const guard = actionGuard.current;
+    const result = await guard(async () => {
+      if (generation !== actionGeneration.current) return null;
       setBusy(true);
       try { return await operation(); }
-      finally { setBusy(false); }
+      finally { if (generation === actionGeneration.current) setBusy(false); }
     });
     return result.started ? result.value : null;
   };
   const act = (fn, success) => runExclusive(async () => {
+    const session = getCurrentAuthSession();
+    if (!session.token) return null;
     try {
-      const response = await fn();
+      const response = await fn(session);
+      if (!isAuthSessionCurrent(session)) return null;
       if (success) notify(success);
       await load();
+      if (!isAuthSessionCurrent(session)) return null;
       await refreshAll();
-      return response;
+      return isAuthSessionCurrent(session) ? response : null;
     } catch (error) {
-      notify(errorMessage(error), 'error');
+      if (isAuthSessionCurrent(session)) notify(errorMessage(error), 'error');
       return null;
     }
   });
   const generateProposal = () => runExclusive(async () => {
+    const session = getCurrentAuthSession();
+    if (!session.token) return null;
     try {
       const response = await appApi.post(`/leases/${id}/proposal/generate`);
+      if (!isAuthSessionCurrent(session)) return null;
       setProposal(response.data?.document || null);
       notify('Proposta gerada para revisão das condições.');
       return response;
     } catch (error) {
-      notify(errorMessage(error), 'error');
+      if (isAuthSessionCurrent(session)) notify(errorMessage(error), 'error');
       return null;
     }
   });
   const generate = () => act(() => appApi.post(`/leases/${id}/contract/generate`), contract ? 'Nova versão do contrato criada sem apagar o histórico anterior.' : 'Contrato gerado com snapshot dos dados da locação.');
-  const send = () => act(async () => {
+  const send = () => act(async (session) => {
     const idempotencyKey = await createLeaseIdempotencyKey('contract-send', l, {
       version: latestVersion?.version ?? contract?.current_version ?? l.contract_version,
       documentId: contract?.public_id,
     });
+    if (!isAuthSessionCurrent(session)) return null;
     return appApi.post(`/leases/${id}/contract/send`, {}, { headers: { 'Idempotency-Key': idempotencyKey } });
   }, 'Versão bloqueada e enviada ao inquilino para assinatura.');
-  const schedule = () => act(async () => {
+  const schedule = () => act(async (session) => {
     const idempotencyKey = await createLeaseIdempotencyKey('schedule', l);
+    if (!isAuthSessionCurrent(session)) return null;
     return appApi.post(`/leases/${id}/charges/schedule`, {}, { headers: { 'Idempotency-Key': idempotencyKey } });
   }, 'Cronograma financeiro atualizado.');
-  const sign = () => act(async () => {
+  const sign = () => act(async (session) => {
     const party = owner ? 'landlord' : 'tenant';
     const signerName = String(signer || (owner ? (user?.name || user?.first_name || 'Locador') : l.tenant_name) || '').trim();
     const idempotencyKey = await createLeaseIdempotencyKey('contract-sign', l, {
@@ -221,18 +277,41 @@ function LeaseDetail({ id, user, onBack, notify, refreshAll }) {
       party,
       signerName,
     });
+    if (!isAuthSessionCurrent(session)) return null;
     return appApi.post(`/leases/${id}/contract/sign`, { party, signer_name: signerName, accepted: true }, {
       headers: { 'Idempotency-Key': idempotencyKey },
     });
   }, 'Assinatura eletrônica vinculada à versão imutável.');
-  const upload = async (event) => { const file = event.target.files?.[0]; if (!file) return; setUploading(true); const body = new FormData(); body.append('category', 'identity'); body.append('file', file); try { await appApi.post(`/leases/${id}/documents`, body, { headers: { 'Content-Type': 'multipart/form-data' } }); notify('Documento enviado.'); await load(); } catch (error) { notify(errorMessage(error), 'error'); } finally { setUploading(false); event.target.value = ''; } };
-  const pay = (charge, method) => act(async () => {
+  const upload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const session = getCurrentAuthSession();
+    const generation = ++uploadGeneration.current;
+    setUploading(true);
+    const body = new FormData();
+    body.append('category', 'identity');
+    body.append('file', file);
+    try {
+      await appApi.post(`/leases/${id}/documents`, body, { headers: { 'Content-Type': 'multipart/form-data' } });
+      if (!isAuthSessionCurrent(session)) return;
+      notify('Documento enviado.');
+      await load();
+    } catch (error) {
+      if (isAuthSessionCurrent(session)) notify(errorMessage(error), 'error');
+    } finally {
+      if (generation === uploadGeneration.current) setUploading(false);
+      event.target.value = '';
+    }
+  };
+  const pay = (charge, method) => act(async (session) => {
     const idempotencyKey = await createLeaseIdempotencyKey('payment', l, { charge, method });
+    if (!isAuthSessionCurrent(session)) return null;
     return appApi.post(`/leases/${id}/charges/${charge.id}/payment`, { method }, { headers: { 'Idempotency-Key': idempotencyKey } });
   }, `Cobrança preparada para ${method === 'pix' ? 'Pix' : method === 'boleto' ? 'boleto' : 'cartão'}.`);
-  const markPaid = (charge) => act(async () => {
+  const markPaid = (charge) => act(async (session) => {
     const paymentMethod = charge.payment_method || 'transfer';
     const idempotencyKey = await createLeaseIdempotencyKey('mark-paid', l, { charge, method: paymentMethod });
+    if (!isAuthSessionCurrent(session)) return null;
     return appApi.patch(`/leases/${id}/charges/${charge.id}/paid`, { payment_method: paymentMethod }, { headers: { 'Idempotency-Key': idempotencyKey } });
   }, 'Pagamento marcado como recebido.');
   const saveAmendment = async () => { if (!amendment.title.trim() || !amendment.label.trim() || !amendment.value.trim()) return; const response = await act(() => appApi.post(`/leases/${id}/contract/amendments`, { title: amendment.title.trim(), changes: [{ label: amendment.label.trim(), value: amendment.value.trim() }] }), 'Aditivo criado e vinculado ao contrato original.'); if (response) { setAmendmentOpen(false); setAmendment({ title: '', label: '', value: '' }); } };
@@ -281,7 +360,24 @@ export default function AppV3() {
     }
   }, [notify]);
   useEffect(() => { if (authenticated) load(); }, [authenticated, load]);
-  useEffect(() => { const handler = () => setAuthenticated(Boolean(localStorage.getItem('token'))); window.addEventListener('authChanged', handler); return () => window.removeEventListener('authChanged', handler); }, []);
+  useEffect(() => {
+    const refreshForSessionChange = () => {
+      const hasSession = Boolean(localStorage.getItem('token'));
+      setAuthenticated(hasSession);
+      if (hasSession) load();
+    };
+    const handleStorage = (event) => {
+      if (event.key === null || event.key === 'token' || event.key === CONTEXT_STORAGE_KEY) refreshForSessionChange();
+    };
+    window.addEventListener('authChanged', refreshForSessionChange);
+    window.addEventListener('peterContextChanged', refreshForSessionChange);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('authChanged', refreshForSessionChange);
+      window.removeEventListener('peterContextChanged', refreshForSessionChange);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [load]);
   const logout = () => {
     setAuthenticated(false);
     setLoading(false);
